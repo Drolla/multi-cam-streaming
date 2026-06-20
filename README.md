@@ -41,6 +41,12 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 Andreas Drollinger
 
+## Real-World Use
+
+This project is successfully used with 4 USB cameras on a Raspberry Pi 5 to observe Common Swift (*Apus apus*) nests. The motion-based layout automatically focuses on the most active nest camera, while the others appear as overlays.
+
+![Common Swift nest monitoring with 4 cameras](docs/images/swift_nest_example.jpg)
+
 ## About
 
 This project was largely "vibe coded" with the assistance of AI, leveraging its capabilities for rapid prototyping and code generation.
