@@ -1,0 +1,81 @@
+# Camera and streaming configuration
+
+# List of camera devices. Each entry is either a plain regex pattern string, or a dict
+# with a 'pattern' key plus optional per-camera attributes:
+#   min_slot (int, default 0)    — never placed in a slot with a lower index (0 = largest slot)
+#   max_slot (int, default inf)  — never placed in a slot with a higher index
+#   activity_multiplier (float, default 1.0) — multiplied with raw score; >1 boosts, <1 suppresses
+# Use: python scripts/camera_viewer.py --list-cameras  to discover device names.
+# The same camera can appear more than once; it is opened and read only once.
+cameras:
+  - "usb.*0-1"
+  - pattern: "usb.*1-1"
+    min_slot: 1                # never fills the largest slot
+  - pattern: "usb.*0-2"
+    max_slot: 2                # only ever fills slots 0–2
+    activity_multiplier: 1.2  # appears 20% more active than raw score
+  - "usb.*1-2"
+
+# Logging level: DEBUG, INFO, WARNING, ERROR (can be overridden with --log-level)
+log_level: WARNING
+
+motion:
+  check_interval: 1.0      # seconds between motion score computations
+  threshold: 15            # pixel diff noise gate (0–255); higher = less sensitive
+  change_threshold: 0.05   # min score delta (0.0–1.0) on any camera to consider a switch
+  min_switch_interval: 5.0 # minimum seconds between accepted layout/assignment changes
+
+# Output stream / display settings
+output:
+  width: 1280
+  height: 720
+  fps: 30
+
+# YouTube stream configuration
+# IMPORTANT: Use environment variable for stream_key instead of hardcoding:
+# export YOUTUBE_STREAM_KEY="your-actual-key"
+youtube:
+  stream_key: "${YOUTUBE_STREAM_KEY}"
+  rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
+
+# Duration in seconds for the alpha-blend transition when the layout or camera
+# assignment changes (set to 0 to disable transitions).
+transition_duration: 0.5
+
+# Layout definitions: the active layout is selected automatically each scoring
+# interval based on how dominant the top-scoring camera is relative to the others.
+# Layouts with unequal slot sizes (high emphasis) are chosen when one camera has
+# much more motion; layouts with equal slot sizes (emphasis ≈ 1) are chosen when
+# motion is distributed evenly across all cameras.
+#
+# Within the selected layout, cameras are assigned to slots by descending motion
+# score: the most active camera fills the largest slot, the next fills the second-
+# largest slot, and so on.  Extra cameras beyond the slot count are ignored.
+# Slots without an assigned camera show black.
+#
+# Each slot defines placement as a fraction of the total output dimensions:
+#   pos  — [x, y]  top-left corner (0.0–1.0)
+#   size — scalar  both width and height as the same fraction (0.0–1.0)
+#
+# Slots are composited in list order; later slots render on top of earlier ones.
+layouts:
+  - name: quad-4x1
+    frames:
+      - {pos: [0.0,  0.0], size: 0.5}  # slot 0 — top-left
+      - {pos: [0.5,  0.0], size: 0.5}  # slot 1 — top-right
+      - {pos: [0.0,  0.5], size: 0.5}  # slot 2 — bottom-left
+      - {pos: [0.5,  0.5], size: 0.5}  # slot 3 — bottom-right
+
+  - name: main-3xright-strip
+    frames:
+      - {pos: [0.00, 0.00], size: 1.0}    # slot 0 — full frame (behind)
+      - {pos: [0.67, 0.00], size: 0.333}  # slot 1 — right-top overlay
+      - {pos: [0.67, 0.33], size: 0.333}  # slot 2 — right-mid overlay
+      - {pos: [0.67, 0.67], size: 0.333}  # slot 3 — right-bottom overlay
+
+  - name: main-2xright-1xbottom-left
+    frames:
+      - {pos: [0.00, 0.00], size: 1.0}   # slot 0 — full frame (behind)
+      - {pos: [0.75, 0.00], size: 0.25}  # slot 1 — right-top overlay
+      - {pos: [0.75, 0.25], size: 0.25}  # slot 2 — right-mid overlay
+      - {pos: [0.00, 0.75], size: 0.25}  # slot 3 — bottom-left overlay

@@ -1,0 +1,4 @@
+opencv-python>=4.5.0
+PyYAML>=5.4
+numpy>=1.19.0
+pygrabber; sys_platform == 'win32'
