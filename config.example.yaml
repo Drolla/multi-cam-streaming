@@ -66,12 +66,12 @@ layouts:
       - {pos: [0.0,  0.5], size: 0.5}  # slot 2 — bottom-left
       - {pos: [0.5,  0.5], size: 0.5}  # slot 3 — bottom-right
 
-  - name: main-3xright-strip
+  - name: quad-1xleft-3xright
     frames:
-      - {pos: [0.00, 0.00], size: 1.0}    # slot 0 — full frame (behind)
-      - {pos: [0.67, 0.00], size: 0.333}  # slot 1 — right-top overlay
-      - {pos: [0.67, 0.33], size: 0.333}  # slot 2 — right-mid overlay
-      - {pos: [0.67, 0.67], size: 0.333}  # slot 3 — right-bottom overlay
+      - {pos: [0.00, 0.00], size: 1.00}  # slot 0 — full frame (behind)
+      - {pos: [0.60, 0.00], size: 0.40}  # slot 1 — right-top overlay
+      - {pos: [0.68, 0.40], size: 0.32}  # slot 2 — right-mid overlay
+      - {pos: [0.72, 0.72], size: 0.28}  # slot 3 — right-buttom overlay
 
   - name: main-2xright-1xbottom-left
     frames:

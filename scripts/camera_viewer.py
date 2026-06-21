@@ -35,6 +35,15 @@ from multi_cam_streaming import camera_manager
 from multi_cam_streaming import ffmpeg
 from multi_cam_streaming.frame_compositor import FrameCompositor
 
+_DEFAULT_WIDTH = 1280
+_DEFAULT_HEIGHT = 720
+_DEFAULT_FPS = 30
+_DEFAULT_MOTION_CHECK_INTERVAL = 1.0
+_DEFAULT_MOTION_THRESHOLD = 15
+_DEFAULT_MOTION_CHANGE_THRESHOLD = 0.05
+_DEFAULT_MIN_SWITCH_INTERVAL = 5.0
+_DEFAULT_TRANSITION_DURATION = 0.5
+
 
 def _parse_camera_entry(entry):
     """Return (pattern_str, attrs_dict) for a camera config entry.
@@ -100,9 +109,9 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False):
     camera_identifiers = list(camera_patterns)
 
     output = config.get('output', {})
-    out_w = int(output.get('width', 1280))
-    out_h = int(output.get('height', 720))
-    fps = int(output.get('fps', 30))
+    out_w = int(output.get('width', _DEFAULT_WIDTH))
+    out_h = int(output.get('height', _DEFAULT_HEIGHT))
+    fps = int(output.get('fps', _DEFAULT_FPS))
     output_dims = (out_w, out_h)
 
     layouts = config.get('layouts', [])
@@ -132,11 +141,11 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False):
         compositor = FrameCompositor(
             layouts, output_dims,
             cam_attrs=list(cam_attrs),
-            motion_log_interval=float(motion_cfg.get('check_interval', 1.0)),
-            motion_threshold=int(motion_cfg.get('threshold', 15)),
-            motion_change_threshold=float(motion_cfg.get('change_threshold', 0.05)),
-            min_switch_interval=float(motion_cfg.get('min_switch_interval', 5.0)),
-            transition_duration=float(config.get('transition_duration', 0.5)),
+            motion_log_interval=float(motion_cfg.get('check_interval', _DEFAULT_MOTION_CHECK_INTERVAL)),
+            motion_threshold=int(motion_cfg.get('threshold', _DEFAULT_MOTION_THRESHOLD)),
+            motion_change_threshold=float(motion_cfg.get('change_threshold', _DEFAULT_MOTION_CHANGE_THRESHOLD)),
+            min_switch_interval=float(motion_cfg.get('min_switch_interval', _DEFAULT_MIN_SWITCH_INTERVAL)),
+            transition_duration=float(config.get('transition_duration', _DEFAULT_TRANSITION_DURATION)),
             show_motion_debug=show_motion_debug)
 
         last_time = time.time()

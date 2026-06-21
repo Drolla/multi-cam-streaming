@@ -1,3 +1,4 @@
+"""Motion-based frame compositor that selects layouts and assigns cameras to slots."""
 import logging
 import time
 from datetime import datetime
@@ -12,6 +13,7 @@ _MOTION_THRESHOLD = 15       # pixel diff below this is treated as sensor noise
 _DEBUG_BAR_WIDTH = 10        # character width of the score bar in the debug window
 _CHANGE_THRESHOLD = 0.05     # min absolute score delta required to accept a layout/assignment change
 _MIN_SWITCH_INTERVAL = 5.0   # minimum seconds between accepted layout/assignment changes
+_TRANSITION_DURATION = 0.5   # seconds to animate slot geometry and alpha-blend on layout change
 
 
 def _lerp(a, b, t):
@@ -42,7 +44,7 @@ class FrameCompositor:
                  motion_log_interval=1.0, motion_threshold=_MOTION_THRESHOLD,
                  motion_change_threshold=_CHANGE_THRESHOLD,
                  min_switch_interval=_MIN_SWITCH_INTERVAL,
-                 transition_duration=0.5, show_motion_debug=False):
+                 transition_duration=_TRANSITION_DURATION, show_motion_debug=False):
         """
         Args:
             layouts: List of layout dicts, each with 'name' and 'frames' (list of slot dicts).

@@ -1,3 +1,4 @@
+"""Camera discovery and lifecycle management for OpenCV-compatible devices."""
 import cv2
 import subprocess
 import re

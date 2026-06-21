@@ -1,9 +1,10 @@
+"""FFmpeg-based streamer for sending video frames to a YouTube RTMP endpoint."""
 import logging
 import subprocess
 import atexit
 
-FRAME_DIMS = (320, 240)  # Output frame dimensions (width, height)
-FPS = 30
+_FRAME_DIMS = (320, 240)  # Output frame dimensions (width, height)
+_FPS = 30
 
 log = logging.getLogger(__name__)
 
@@ -12,7 +13,7 @@ class FFmpegStreamer:
     """Stream video frames to YouTube via FFmpeg."""
 
     @staticmethod
-    def _build_ffmpeg_cmd(fps=FPS, frame_ims=FRAME_DIMS, *, youtube_url):
+    def _build_ffmpeg_cmd(fps=_FPS, frame_ims=_FRAME_DIMS, *, youtube_url):
         """Build the FFmpeg command with the given parameters.
 
         Args:
@@ -60,8 +61,8 @@ class FFmpegStreamer:
             frame_ims: Dimensions of the frames being written, i.e. the combined grid
                 size, as (width, height) (default: module FRAME_DIMS)
         """
-        self.fps = fps if fps is not None else FPS
-        self.frame_dims = frame_ims if frame_ims is not None else FRAME_DIMS
+        self.fps = fps if fps is not None else _FPS
+        self.frame_dims = frame_ims if frame_ims is not None else _FRAME_DIMS
         self.youtube_url = youtube_url
         self.ffmpeg_cmd = self._build_ffmpeg_cmd(self.fps, self.frame_dims, youtube_url=self.youtube_url)
         self.process = None
