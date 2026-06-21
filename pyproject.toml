@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "multi-cam-streaming"
 version = "1.0.0"
-description = "Stream multiple USB camera feeds to YouTube from Raspberry Pi or Linux"
+description = "Stream multiple camera feeds to YouTube in real-time. Supports USB, CSI, and other OpenCV-compatible cameras."
 readme = "README.md"
 authors = [
     {name = "Andreas Drollinger"}

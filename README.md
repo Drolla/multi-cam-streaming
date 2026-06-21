@@ -1,10 +1,10 @@
 # multi_cam_streaming
 
-Stream multiple USB camera feeds to YouTube in real-time. Runs on Raspberry Pi, Linux, and Windows.
+Stream multiple camera feeds to YouTube in real-time. Supports USB, CSI, and other OpenCV-compatible cameras. Runs on Raspberry Pi, Linux, and Windows.
 
 ## Features
 
-- **Multi-camera support** - Combine feeds from multiple USB cameras into a single frame
+- **Multi-camera support** - Combine feeds from multiple cameras (USB, CSI, or any OpenCV-compatible source) into a single frame
 - **YouTube streaming** - Stream directly to YouTube via RTMP
 - **Live display** - View camera feeds locally with timestamp overlay
 - **Configurable** - All settings via YAML configuration file
@@ -16,7 +16,7 @@ Stream multiple USB camera feeds to YouTube in real-time. Runs on Raspberry Pi, 
 - FFmpeg installed and in PATH
 - v4l-utils (Linux/Raspberry Pi only, for camera detection)
 - pygrabber (Windows only, for camera detection — installed automatically)
-- USB cameras or similar video devices
+- Cameras supported by OpenCV (USB, CSI, IP cameras, etc.)
 
 ## Installation
 

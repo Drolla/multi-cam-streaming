@@ -5,7 +5,7 @@
 - Virtual environment activated: `source venv/bin/activate`
 - Configuration file created: `cp config.example.yaml config_rpi.yaml` (or `config_windows.yaml`)
 - YouTube stream key set in your config file or environment variable
-- USB cameras connected
+- Cameras connected and detected by OpenCV
 
 ## Stream to YouTube
 

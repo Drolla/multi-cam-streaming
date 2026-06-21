@@ -4,7 +4,7 @@
 
 - Python 3.7 or higher
 - FFmpeg installed and in PATH
-- USB cameras
+- Cameras supported by OpenCV (USB, CSI, IP cameras, etc.)
 - v4l-utils — Linux/Raspberry Pi only, for camera detection
 - pygrabber — Windows only, installed automatically via pip
 
@@ -12,15 +12,7 @@
 
 ### 1. Install System Dependencies
 
-**Ubuntu / Debian:**
-```bash
-sudo apt-get update
-sudo apt-get install python3 python3-pip python3-venv
-sudo apt-get install ffmpeg
-sudo apt-get install v4l-utils
-```
-
-**Raspberry Pi (Raspberry Pi OS):**
+**Ubuntu / Debian / Raspberry Pi (Raspberry Pi OS):**
 ```bash
 sudo apt-get update
 sudo apt-get install python3 python3-pip python3-venv
