@@ -2,3 +2,5 @@ opencv-python>=4.5.0
 PyYAML>=5.4
 numpy>=1.19.0
 pygrabber; sys_platform == 'win32'
+sounddevice>=0.4.0
+pyudev>=0.24.0; sys_platform == 'linux'

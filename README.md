@@ -7,6 +7,7 @@ Stream multiple camera feeds to YouTube in real-time. Supports USB, CSI, and oth
 - **Multi-camera support** - Combine feeds from multiple cameras (USB, CSI, or any OpenCV-compatible source) into a single frame
 - **YouTube streaming** - Stream directly to YouTube via RTMP
 - **Live display** - View camera feeds locally with timestamp overlay
+- **Motion-weighted audio** - Blend microphone audio from each camera proportional to its motion score
 - **Configurable** - All settings via YAML configuration file
 - **Flexible** - Easily adjust FPS, frame dimensions, and camera detection patterns
 
@@ -16,6 +17,8 @@ Stream multiple camera feeds to YouTube in real-time. Supports USB, CSI, and oth
 - FFmpeg installed and in PATH
 - v4l-utils (Linux/Raspberry Pi only, for camera detection)
 - pygrabber (Windows only, for camera detection — installed automatically)
+- sounddevice (optional, for audio mixing — installed automatically)
+- pyudev (Linux only, optional, for automatic mic-to-camera matching — installed automatically)
 - Cameras supported by OpenCV (USB, CSI, IP cameras, etc.)
 
 ## Installation

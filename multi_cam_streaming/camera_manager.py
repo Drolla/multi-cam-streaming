@@ -23,6 +23,8 @@ class CameraManager:
         # One entry per identifier slot, in config order. Slots that resolve to the same
         # physical device share (reference) the same capture object.
         self.frame_sources: List[cv2.VideoCapture] = []
+        # OpenCV/v4l2 device index per identifier slot (-1 if unmatched).
+        self.video_indexes: List[int] = []
 
     @staticmethod
     def _get_v4l2_device_indexes() -> Dict[str, int]:
@@ -113,6 +115,7 @@ class CameraManager:
             )
             if match is None:
                 logging.warning("No camera matched pattern '%s'", identifier)
+                self.video_indexes.append(-1)
                 continue
 
             camera_name, camera_index = match
@@ -121,11 +124,13 @@ class CameraManager:
                 cap = cv2.VideoCapture(camera_index)
                 if not cap.isOpened():
                     logging.warning("Camera '%s' (index %d) failed to open", camera_name, camera_index)
+                    self.video_indexes.append(-1)
                     continue
                 opened[camera_index] = cap
                 self.cameras.append(cap)
 
             self.frame_sources.append(cap)
+            self.video_indexes.append(camera_index)
 
     def close(self) -> None:
         """Close all camera captures."""
@@ -133,6 +138,7 @@ class CameraManager:
             cap.release()
         self.cameras.clear()
         self.frame_sources.clear()
+        self.video_indexes.clear()
     
     def __enter__(self):
         """Context manager entry."""

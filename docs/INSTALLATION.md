@@ -7,6 +7,8 @@
 - Cameras supported by OpenCV (USB, CSI, IP cameras, etc.)
 - v4l-utils — Linux/Raspberry Pi only, for camera detection
 - pygrabber — Windows only, installed automatically via pip
+- sounddevice — optional, for motion-weighted audio mixing, installed automatically via pip
+- pyudev — Linux only, optional, for automatic mic-to-camera matching, installed automatically via pip
 
 ## Linux / Raspberry Pi Setup
 
@@ -18,6 +20,7 @@ sudo apt-get update
 sudo apt-get install python3 python3-pip python3-venv
 sudo apt-get install ffmpeg
 sudo apt-get install v4l-utils
+sudo apt-get install libasound2-dev   # required by sounddevice for audio mixing
 ```
 
 ### 2. Clone and Setup Project

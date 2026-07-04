@@ -33,6 +33,7 @@ import argparse
 import yaml
 from multi_cam_streaming import camera_manager
 from multi_cam_streaming import ffmpeg
+from multi_cam_streaming.audio_mixer import AudioMixer
 from multi_cam_streaming.frame_compositor import FrameCompositor
 
 _DEFAULT_WIDTH = 1280
@@ -51,13 +52,15 @@ def _parse_camera_entry(entry):
     Accepts either a plain string or a dict with a 'pattern' key.
     """
     if isinstance(entry, str):
-        return entry, {'min_slot': 0, 'max_slot': float('inf'), 'activity_multiplier': 1.0}
+        return entry, {'min_slot': 0, 'max_slot': float('inf'), 'activity_multiplier': 1.0,
+                       'mic': None}
     pattern = entry['pattern']
     raw_max = entry.get('max_slot')
     attrs = {
         'min_slot': int(entry.get('min_slot', 0)),
         'max_slot': float('inf') if raw_max is None else int(raw_max),
         'activity_multiplier': float(entry.get('activity_multiplier', 1.0)),
+        'mic': entry.get('mic'),
     }
     return pattern, attrs
 
@@ -99,7 +102,8 @@ def list_cameras():
         print(f"  - {name}: index {index}")
 
 
-def run_camera_viewer(config_path, mode="stream", show_motion_debug=False):
+def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
+                      audio_output=None):
     """Run the camera viewer in display, stream, or both modes."""
     config = load_config(config_path)
 
@@ -127,15 +131,29 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False):
             return
         youtube_url = youtube_rtmp_url + youtube_stream_key
 
+    audio_cfg = config.get('audio', {})
+    audio_enabled = bool(audio_cfg.get('enabled', False))
+    # CLI --audio-output overrides yaml audio.output; None means no local playback
+    effective_audio_output = audio_output if audio_output is not None else audio_cfg.get('output')
+
     with camera_manager.CameraManager(camera_identifiers) as cam_mgr:
         if not cam_mgr.cameras:
             print("No cameras found.")
             return
 
+        audio_mixer = None
+        if audio_enabled and mode in ("stream", "both"):
+            raw_entries = config.get('cameras', [])
+            audio_mixer = AudioMixer(raw_entries, cam_mgr.video_indexes)
+            audio_mixer.open(output_device=effective_audio_output)
+
+        audio_pipe_fd = audio_mixer.audio_pipe_fd if audio_mixer else None
+
         youtube_stream = None
         if mode in ("stream", "both"):
             youtube_stream = ffmpeg.FFmpegStreamer(youtube_url=youtube_url, fps=fps,
-                                                  frame_ims=output_dims)
+                                                  frame_ims=output_dims,
+                                                  audio_pipe_fd=audio_pipe_fd)
 
         motion_cfg = config.get('motion', {})
         compositor = FrameCompositor(
@@ -148,11 +166,22 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False):
             transition_duration=float(config.get('transition_duration', _DEFAULT_TRANSITION_DURATION)),
             show_motion_debug=show_motion_debug)
 
+        last_score_count = 0
         last_time = time.time()
         try:
             while True:
                 frames = read_frames(cam_mgr.frame_sources, output_dims)
                 combined = compositor.process(frames)
+
+                if audio_mixer is not None:
+                    scores = compositor.motion_scores
+                    if scores and len(scores) != last_score_count:
+                        last_score_count = len(scores)
+                    if scores:
+                        total = sum(scores)
+                        weights = [s / total for s in scores] if total > 0 else \
+                                  [1.0 / len(scores)] * len(scores)
+                        audio_mixer.set_weights(weights)
 
                 if mode in ("display", "both"):
                     cv2.imshow("multi_cam_streaming", combined)
@@ -174,6 +203,8 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False):
         except KeyboardInterrupt:
             print("\nCtrl-C pressed, shutting down...")
         finally:
+            if audio_mixer is not None:
+                audio_mixer.close()
             if youtube_stream is not None:
                 youtube_stream.cleanup()
             if mode in ("display", "both"):
@@ -216,6 +247,14 @@ def main():
         action="store_true",
         help="Show a debug window with the reduced grayscale images used for motion scoring."
     )
+    parser.add_argument(
+        "--audio-output",
+        type=str,
+        default=None,
+        metavar="DEVICE",
+        help="Play mixed audio to the named output device (substring match). "
+             "Overrides audio.output in config. Requires audio.enabled: true."
+    )
 
     args = parser.parse_args()
 
@@ -238,7 +277,8 @@ def main():
                         format="%(asctime)s %(levelname)s %(message)s",
                         datefmt="%H:%M:%S")
 
-    run_camera_viewer(args.config, mode=args.mode, show_motion_debug=args.show_motion_debug)
+    run_camera_viewer(args.config, mode=args.mode, show_motion_debug=args.show_motion_debug,
+                      audio_output=args.audio_output)
 
 
 if __name__ == "__main__":

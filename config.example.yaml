@@ -5,6 +5,8 @@
 #   min_slot (int, default 0)    — never placed in a slot with a lower index (0 = largest slot)
 #   max_slot (int, default inf)  — never placed in a slot with a higher index
 #   activity_multiplier (float, default 1.0) — multiplied with raw score; >1 boosts, <1 suppresses
+#   mic (str, optional)          — substring pattern to match the camera's audio device name;
+#                                  auto-detected if omitted (USB cameras with built-in mics only)
 # Use: python scripts/camera_viewer.py --list-cameras  to discover device names.
 # The same camera can appear more than once; it is opened and read only once.
 cameras:
@@ -14,7 +16,8 @@ cameras:
   - pattern: "usb.*0-2"
     max_slot: 2                # only ever fills slots 0–2
     activity_multiplier: 1.2  # appears 20% more active than raw score
-  - "usb.*1-2"
+  - pattern: "csi-camera"      # example: CSI camera with no auto-detectable mic
+    mic: "ReSpeaker"           # explicit audio device name pattern (substring match)
 
 # Logging level: DEBUG, INFO, WARNING, ERROR (can be overridden with --log-level)
 log_level: WARNING
@@ -37,6 +40,15 @@ output:
 youtube:
   stream_key: "${YOUTUBE_STREAM_KEY}"
   rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
+
+# Audio mixing: blend microphone audio from each camera weighted by motion score.
+# Requires sounddevice (all platforms) and pyudev (Linux) to be installed.
+# Built-in mics on USB cameras are auto-detected; use the 'mic' field per camera
+# entry to override or to assign a mic to cameras without auto-detectable audio.
+audio:
+  enabled: false   # set to true to enable live audio mixing
+  # output: "Speakers"  # optional: substring of output device name for local playback;
+  #                     # can also be set via --audio-output on the command line (CLI takes priority)
 
 # Duration in seconds for the alpha-blend transition when the layout or camera
 # assignment changes (set to 0 to disable transitions).

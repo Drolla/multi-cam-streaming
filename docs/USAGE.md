@@ -54,6 +54,14 @@ python3 scripts/camera_viewer.py --config custom.yaml --mode stream
 python3 scripts/camera_viewer.py --list-cameras
 ```
 
+### Play Mixed Audio to a Local Speaker
+Requires `audio: enabled: true` in your config. The device name is a substring match.
+```bash
+python3 scripts/camera_viewer.py --audio-output "Speakers"
+```
+The output device can also be set permanently in the config (`audio: output: "Speakers"`);
+`--audio-output` on the command line takes priority over the config value.
+
 ### If installed as command
 ```bash
 stream-to-youtube
@@ -61,6 +69,7 @@ stream-to-youtube --mode display
 stream-to-youtube --mode both
 stream-to-youtube --config custom.yaml --mode stream
 stream-to-youtube --list-cameras
+stream-to-youtube --audio-output "Speakers"
 ```
 
 ### Controls
@@ -81,6 +90,8 @@ cameras:
     min_slot: 1              # never fills slot 0 (largest)
     max_slot: 2              # never fills slots beyond 2
     activity_multiplier: 1.5 # perceived activity boosted 50%
+  - pattern: "csi-camera"   # CSI or other camera without auto-detectable mic
+    mic: "ReSpeaker"         # explicit audio device name pattern (substring match)
 
 motion:
   check_interval: 1.0      # seconds between motion score computations
@@ -96,6 +107,10 @@ output:
 youtube:
   stream_key: "${YOUTUBE_STREAM_KEY}"
   rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
+
+audio:
+  enabled: false  # set to true to mix microphone audio weighted by motion score
+  # output: "Speakers"  # optional: play mixed audio to this local output device (substring match)
 
 transition_duration: 0.5   # seconds to animate between layouts
 
@@ -220,13 +235,13 @@ sudo journalctl -u multi-cam-stream -f
 
 ### Adjust Video Quality
 
-Modify your config file for better quality (higher bitrate in FFmpeg):
+Modify your config file to change resolution or frame rate:
 
 ```yaml
-frame_dims:
-  width: 640
-  height: 480
-fps: 60
+output:
+  width: 1920
+  height: 1080
+  fps: 60
 ```
 
 ### Multiple Streams

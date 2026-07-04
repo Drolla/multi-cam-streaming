@@ -11,6 +11,7 @@ log = logging.getLogger(__name__)
 
 _MOTION_THRESHOLD = 15       # pixel diff below this is treated as sensor noise
 _DEBUG_BAR_WIDTH = 10        # character width of the score bar in the debug window
+_MIN_MOTION_FRAME_SIZE = 16  # minimum camera frame width/height after 1/4 resize to be useful for motion scoring
 _CHANGE_THRESHOLD = 0.05     # min absolute score delta required to accept a layout/assignment change
 _MIN_SWITCH_INTERVAL = 5.0   # minimum seconds between accepted layout/assignment changes
 _TRANSITION_DURATION = 0.5   # seconds to animate slot geometry and alpha-blend on layout change
@@ -108,6 +109,11 @@ class FrameCompositor:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    @property
+    def motion_scores(self) -> list[float]:
+        """Most recent per-camera motion scores, one per camera in frame order."""
+        return list(self._motion_scores)
 
     def process(self, frames):
         """Score, select layout, assign cameras, and composite into the output canvas.
@@ -311,6 +317,10 @@ class FrameCompositor:
 
         for cam_idx, frame in enumerate(frames):
             small = cv2.resize(frame, (frame.shape[1] // 4, frame.shape[0] // 4))
+            if small.shape[0] < _MIN_MOTION_FRAME_SIZE or small.shape[1] < _MIN_MOTION_FRAME_SIZE:
+                scores.append(0.0)
+                diff_images.append(np.zeros((_MIN_MOTION_FRAME_SIZE, _MIN_MOTION_FRAME_SIZE), dtype=np.uint8))
+                continue
             gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
             if cam_idx in self._prev_grays:
                 diff = cv2.absdiff(gray, self._prev_grays[cam_idx])
@@ -340,7 +350,10 @@ class FrameCompositor:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
             panels.append(panel)
         if panels:
-            cv2.imshow("motion debug", np.hstack(panels))
+            target_h = max(p.shape[0] for p in panels)
+            normalized = [cv2.resize(p, (int(p.shape[1] * target_h / p.shape[0]), target_h))
+                          for p in panels]
+            cv2.imshow("motion debug", np.hstack(normalized))
 
     def _rank_cameras(self, frames):
         """Return (cam_idx, frame) pairs sorted by descending motion score.
