@@ -13,7 +13,8 @@ Usage:
     python camera_viewer.py --mode display            # Display only
     python camera_viewer.py --mode both               # Display and stream
     python camera_viewer.py --config custom.yaml      # Use custom config file
-    python camera_viewer.py --list-cameras            # List available cameras and exit
+    python camera_viewer.py --list-cameras             # List available cameras and exit
+    python camera_viewer.py --list-audio-devices       # List available audio devices and exit
 
 Configuration is loaded from a YAML file. See config.example.yaml for format. Cameras are
 assigned to layout slots dynamically by motion priority: the most active camera fills
@@ -102,6 +103,29 @@ def list_cameras():
         print(f"  - {name}: index {index}")
 
 
+def list_audio_devices():
+    """Print all available audio input and output devices."""
+    import sounddevice as sd
+    devices = sd.query_devices()
+    default_in = sd.default.device[0]
+    default_out = sd.default.device[1]
+    host_apis = sd.query_hostapis()
+
+    print("Available audio input devices (use index or name substring as 'mic:' in camera config):")
+    for i, dev in enumerate(devices):
+        if dev['max_input_channels'] >= 1:
+            api = host_apis[dev['hostapi']]['name']
+            marker = " *default*" if i == default_in else ""
+            print(f"  [{i}] {dev['name']}  ({api}){marker}")
+    print()
+    print("Available audio output devices (use index or name substring as 'audio: output:' or --audio-output):")
+    for i, dev in enumerate(devices):
+        if dev['max_output_channels'] >= 1:
+            api = host_apis[dev['hostapi']]['name']
+            marker = " *default*" if i == default_out else ""
+            print(f"  [{i}] {dev['name']}  ({api}){marker}")
+
+
 def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
                       audio_output=None):
     """Run the camera viewer in display, stream, or both modes."""
@@ -142,18 +166,21 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
             return
 
         audio_mixer = None
-        if audio_enabled and mode in ("stream", "both"):
+        if audio_enabled:
             raw_entries = config.get('cameras', [])
-            audio_mixer = AudioMixer(raw_entries, cam_mgr.video_indexes)
+            audio_mixer = AudioMixer(raw_entries, cam_mgr.video_indexes,
+                                     pipe_needed=mode in ("stream", "both"))
             audio_mixer.open(output_device=effective_audio_output)
 
         audio_pipe_fd = audio_mixer.audio_pipe_fd if audio_mixer else None
+        audio_sample_rate = audio_mixer.audio_sample_rate if audio_mixer else 48000
 
         youtube_stream = None
         if mode in ("stream", "both"):
             youtube_stream = ffmpeg.FFmpegStreamer(youtube_url=youtube_url, fps=fps,
                                                   frame_ims=output_dims,
-                                                  audio_pipe_fd=audio_pipe_fd)
+                                                  audio_pipe_fd=audio_pipe_fd,
+                                                  audio_sample_rate=audio_sample_rate)
 
         motion_cfg = config.get('motion', {})
         compositor = FrameCompositor(
@@ -255,11 +282,20 @@ def main():
         help="Play mixed audio to the named output device (substring match). "
              "Overrides audio.output in config. Requires audio.enabled: true."
     )
+    parser.add_argument(
+        "--list-audio-devices",
+        action="store_true",
+        help="List available audio input (mic) and output (speaker) devices and exit."
+    )
 
     args = parser.parse_args()
 
     if args.list_cameras:
         list_cameras()
+        exit(0)
+
+    if args.list_audio_devices:
+        list_audio_devices()
         exit(0)
 
     config_path = Path(args.config)

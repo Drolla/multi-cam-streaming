@@ -54,6 +54,12 @@ python3 scripts/camera_viewer.py --config custom.yaml --mode stream
 python3 scripts/camera_viewer.py --list-cameras
 ```
 
+### List Available Audio Devices
+Lists all audio input devices (for the `mic:` camera config field) and output devices (for `--audio-output` / `audio: output:`).
+```bash
+python3 scripts/camera_viewer.py --list-audio-devices
+```
+
 ### Play Mixed Audio to a Local Speaker
 Requires `audio: enabled: true` in your config. The device name is a substring match.
 ```bash
@@ -69,6 +75,7 @@ stream-to-youtube --mode display
 stream-to-youtube --mode both
 stream-to-youtube --config custom.yaml --mode stream
 stream-to-youtube --list-cameras
+stream-to-youtube --list-audio-devices
 stream-to-youtube --audio-output "Speakers"
 ```
 

@@ -21,10 +21,10 @@ import sounddevice as sd
 
 log = logging.getLogger(__name__)
 
-_SAMPLE_RATE = 44100
-_CHANNELS = 1       # mono mix output
+_SAMPLE_RATE = 48000  # default; overridden per-device by querying device's native rate
+_CHANNELS = 1         # mono mix output
 _DTYPE = 'int16'
-_BLOCK_SIZE = 1024  # samples per read block
+_BLOCK_SIZE = 1024    # samples per read block
 
 
 def _sd_input_devices() -> list[tuple[int, str]]:
@@ -37,7 +37,13 @@ def _sd_input_devices() -> list[tuple[int, str]]:
 
 
 def _match_by_name(pattern: str, input_devices: list[tuple[int, str]]) -> int | None:
-    """Return sounddevice index for the first device whose name contains pattern (case-insensitive)."""
+    """Return sounddevice index for the first device whose name contains pattern (case-insensitive).
+
+    If pattern is a plain integer string, it is treated as a direct device index.
+    """
+    if pattern.strip().isdigit():
+        idx = int(pattern.strip())
+        return idx if any(i == idx for i, _ in input_devices) else None
     plain = pattern.replace('.*', '').replace('*', '').strip()
     for sd_idx, name in input_devices:
         if plain.lower() in name.lower():
@@ -104,15 +110,18 @@ class AudioMixer:
                 mixer.set_weights(normalized_motion_scores)
     """
 
-    def __init__(self, camera_entries: list, video_indexes: list[int]):
+    def __init__(self, camera_entries: list, video_indexes: list[int], pipe_needed: bool = True):
         """
         Args:
             camera_entries: Raw camera config entries (str or dict with optional 'mic' key).
             video_indexes:  OpenCV device indexes in the same order as camera_entries.
                             Use -1 for cameras with no numeric video index.
+            pipe_needed:    True when FFmpeg will consume the audio pipe (stream/both modes).
+                            False for display-only mode — pipe is skipped to avoid blocking.
         """
         self._camera_entries = camera_entries
         self._video_indexes = video_indexes
+        self._pipe_needed = pipe_needed
         self._cam_to_sd: dict[int, int] = {}   # cam_pos → sounddevice index
         self._streams: list[sd.InputStream] = []
         self._weights = np.zeros(len(camera_entries), dtype=np.float32)
@@ -121,7 +130,11 @@ class AudioMixer:
         self._stop_event = threading.Event()
         self._pipe_write_fd: int | None = None
         self.audio_pipe_fd: int | None = None  # readable fd — passed to FFmpeg
+        self.audio_sample_rate: int = _SAMPLE_RATE  # actual rate used; set after open()
         self._out_stream: sd.OutputStream | None = None
+        self._out_queue: queue.Queue = queue.Queue(maxsize=4)
+        self._out_sample_rate: int = _SAMPLE_RATE
+        self._cam_sample_rates: dict[int, int] = {}
 
     def open(self, output_device: str | None = None) -> None:
         """Discover mic devices, open streams, start the mix thread.
@@ -171,15 +184,33 @@ class AudioMixer:
             log.warning("No camera mics matched; audio stream will be silent")
             return
 
-        pipe_read_fd, self._pipe_write_fd = os.pipe()
-        self.audio_pipe_fd = pipe_read_fd
+        if self._pipe_needed:
+            pipe_read_fd, self._pipe_write_fd = os.pipe()
+            self.audio_pipe_fd = pipe_read_fd
 
         n_cams = len(self._camera_entries)
         self._weights = np.ones(n_cams, dtype=np.float32) / max(n_cams, 1)
-        self._buffers = [queue.Queue(maxsize=8) for _ in range(n_cams)]
+        self._cam_sample_rates: dict[int, int] = {}
 
+        # One shared queue per unique sounddevice index (avoids opening the same
+        # physical mic multiple times, which causes glitches and contention).
+        sd_idx_to_queue: dict[int, queue.Queue] = {}
         for cam_pos, sd_idx in self._cam_to_sd.items():
-            buf = self._buffers[cam_pos]
+            if sd_idx not in sd_idx_to_queue:
+                sd_idx_to_queue[sd_idx] = queue.Queue(maxsize=8)
+
+        # cam_pos → the shared queue for its sounddevice
+        self._buffers: dict[int, queue.Queue] = {
+            cam_pos: sd_idx_to_queue[sd_idx]
+            for cam_pos, sd_idx in self._cam_to_sd.items()
+        }
+
+        for sd_idx, buf in sd_idx_to_queue.items():
+            sample_rate = int(sd.query_devices(sd_idx)['default_samplerate'])
+            # Record sample rate for every camera using this device
+            for cam_pos, mapped_idx in self._cam_to_sd.items():
+                if mapped_idx == sd_idx:
+                    self._cam_sample_rates[cam_pos] = sample_rate
 
             def _callback(indata, frames, time_info, status, _buf=buf):
                 if status:
@@ -193,15 +224,17 @@ class AudioMixer:
                 stream = sd.InputStream(
                     device=sd_idx,
                     channels=_CHANNELS,
-                    samplerate=_SAMPLE_RATE,
+                    samplerate=sample_rate,
                     dtype=_DTYPE,
                     blocksize=_BLOCK_SIZE,
                     callback=_callback,
                 )
                 stream.start()
                 self._streams.append(stream)
+                self.audio_sample_rate = sample_rate
+                log.info("Audio device %d opened at %d Hz", sd_idx, sample_rate)
             except Exception as e:
-                log.warning("Failed to open audio stream for camera %d: %s", cam_pos, e)
+                log.warning("Failed to open audio stream for device %d: %s", sd_idx, e)
 
         if output_device is not None:
             out_devices = [
@@ -209,25 +242,43 @@ class AudioMixer:
                 for i, dev in enumerate(sd.query_devices())
                 if dev['max_output_channels'] >= 1
             ]
-            out_idx = next(
-                (i for i, name in out_devices if output_device.lower() in name.lower()),
-                None,
-            )
+            if output_device.isdigit():
+                idx = int(output_device)
+                out_idx = idx if any(i == idx for i, _ in out_devices) else None
+            else:
+                out_idx = next(
+                    (i for i, name in out_devices if output_device.lower() in name.lower()),
+                    None,
+                )
             if out_idx is None:
                 log.warning("No output device matched '%s'; local audio playback disabled",
                             output_device)
             else:
                 try:
+                    out_dev_info = sd.query_devices(out_idx)
+                    out_sample_rate = int(out_dev_info['default_samplerate'])
+
+                    def _out_callback(outdata, frames, time_info, status, _q=self._out_queue):  # noqa: ARG001
+                        if status:
+                            log.debug("Audio output status: %s", status)
+                        try:
+                            block = _q.get_nowait()
+                            outdata[:] = block.reshape(-1, 1)
+                        except queue.Empty:
+                            outdata.fill(0)  # output silence rather than stall
+
                     self._out_stream = sd.OutputStream(
                         device=out_idx,
                         channels=_CHANNELS,
-                        samplerate=_SAMPLE_RATE,
+                        samplerate=out_sample_rate,
                         dtype=_DTYPE,
                         blocksize=_BLOCK_SIZE,
+                        callback=_out_callback,
                     )
                     self._out_stream.start()
-                    log.info("Audio output → device %d ('%s')",
-                             out_idx, sd.query_devices(out_idx)['name'])
+                    self._out_sample_rate = out_sample_rate
+                    log.info("Audio output → device %d ('%s') at %d Hz",
+                             out_idx, out_dev_info['name'], out_sample_rate)
                 except Exception as e:
                     log.warning("Failed to open audio output device '%s': %s", output_device, e)
                     self._out_stream = None
@@ -250,37 +301,59 @@ class AudioMixer:
         self._weights = arr / total if total > 0 else arr
 
     def _mix_loop(self) -> None:
-        """Read one block from each mic, apply weights, write mixed PCM to the pipe."""
+        """Read one block from the shared mic queue, apply weights, output mixed PCM."""
         silence = np.zeros(_BLOCK_SIZE, dtype=np.int32)
+        first_rate = next(iter(self._cam_sample_rates.values()), _SAMPLE_RATE)
+        block_duration = _BLOCK_SIZE / first_rate  # seconds per block
+
+        # Collect the set of unique queues (one per physical mic device)
+        unique_queues = list({id(q): q for q in self._buffers.values()}.values())
 
         try:
             while not self._stop_event.is_set():
+                # Block on the first (and typically only) unique mic queue to pace
+                # the loop at the hardware block rate, then mix.
+                try:
+                    primary_block = unique_queues[0].get(timeout=block_duration * 4)
+                except queue.Empty:
+                    continue
+
                 mixed = silence.copy()
-                for cam_pos in self._cam_to_sd:
-                    weight = float(self._weights[cam_pos]) if cam_pos < len(self._weights) else 0.0
+                weights = self._weights  # snapshot for this iteration
+
+                # Accumulate weighted contribution from each camera.
+                # Cameras sharing the same physical mic share the same block.
+                seen: dict[int, np.ndarray] = {id(unique_queues[0]): primary_block}
+                for cam_pos, buf in self._buffers.items():
+                    weight = float(weights[cam_pos]) if cam_pos < len(weights) else 0.0
                     if weight == 0.0:
                         continue
-                    try:
-                        block = self._buffers[cam_pos].get(timeout=0.1)
-                        mixed += (block[:, 0].astype(np.int32) * weight).astype(np.int32)
-                    except queue.Empty:
-                        pass  # camera silent or lagging — contribute silence
+                    buf_id = id(buf)
+                    if buf_id not in seen:
+                        try:
+                            seen[buf_id] = buf.get_nowait()
+                        except queue.Empty:
+                            seen[buf_id] = np.zeros((_BLOCK_SIZE, _CHANNELS), dtype=_DTYPE)
+                    block = seen[buf_id]
+                    mixed += (block[:, 0].astype(np.int32) * weight).astype(np.int32)
 
                 clipped = np.clip(mixed, -32768, 32767).astype(np.int16)
-                try:
-                    os.write(self._pipe_write_fd, clipped.tobytes())
-                except OSError:
-                    break  # pipe closed — FFmpeg exited
+                if self._pipe_write_fd is not None:
+                    try:
+                        os.write(self._pipe_write_fd, clipped.tobytes())
+                    except OSError:
+                        break  # pipe closed — FFmpeg exited
                 if self._out_stream is not None:
                     try:
-                        self._out_stream.write(clipped.reshape(-1, 1))
-                    except Exception:
-                        pass
+                        self._out_queue.put_nowait(clipped)
+                    except queue.Full:
+                        pass  # output is behind — drop rather than stall the mix loop
         finally:
-            try:
-                os.close(self._pipe_write_fd)
-            except OSError:
-                pass
+            if self._pipe_write_fd is not None:
+                try:
+                    os.close(self._pipe_write_fd)
+                except OSError:
+                    pass
 
     def close(self) -> None:
         """Stop all audio streams and the mix thread."""

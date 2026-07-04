@@ -13,7 +13,8 @@ class FFmpegStreamer:
     """Stream video frames to YouTube via FFmpeg."""
 
     @staticmethod
-    def _build_ffmpeg_cmd(fps=_FPS, frame_ims=_FRAME_DIMS, *, youtube_url, audio_pipe_fd=None):
+    def _build_ffmpeg_cmd(fps=_FPS, frame_ims=_FRAME_DIMS, *, youtube_url,
+                          audio_pipe_fd=None, audio_sample_rate=48000):
         """Build the FFmpeg command with the given parameters.
 
         Args:
@@ -22,8 +23,9 @@ class FFmpegStreamer:
                 grid size, as (width, height)
             youtube_url: YouTube RTMP URL
             audio_pipe_fd: File descriptor of a readable pipe carrying raw 16-bit
-                mono PCM at 44100 Hz. When provided, FFmpeg reads live audio from
-                this pipe instead of generating silence.
+                mono PCM. When provided, FFmpeg reads live audio from this pipe
+                instead of generating silence.
+            audio_sample_rate: Sample rate of the PCM data in the pipe (Hz).
 
         Returns:
             List of FFmpeg command arguments
@@ -31,14 +33,14 @@ class FFmpegStreamer:
         if audio_pipe_fd is not None:
             audio_input = [
                 "-f", "s16le",
-                "-ar", "44100",
+                "-ar", str(audio_sample_rate),
                 "-ac", "1",
                 "-i", f"pipe:{audio_pipe_fd}",
             ]
         else:
             audio_input = [
                 "-f", "lavfi",
-                "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+                "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
             ]
         return [
             "ffmpeg",
@@ -66,7 +68,8 @@ class FFmpegStreamer:
             youtube_url
         ]
 
-    def __init__(self, youtube_url, fps=None, frame_ims=None, audio_pipe_fd=None):
+    def __init__(self, youtube_url, fps=None, frame_ims=None, audio_pipe_fd=None,
+                 audio_sample_rate=48000):
         """Initialize FFmpeg streamer.
 
         Args:
@@ -75,7 +78,8 @@ class FFmpegStreamer:
             frame_ims: Dimensions of the frames being written, i.e. the combined grid
                 size, as (width, height) (default: module FRAME_DIMS)
             audio_pipe_fd: Optional file descriptor of a readable pipe with raw PCM
-                audio (16-bit mono, 44100 Hz). When None, a silent stream is used.
+                audio (16-bit mono). When None, a silent stream is used.
+            audio_sample_rate: Sample rate of the PCM data in the pipe (Hz).
         """
         self.fps = fps if fps is not None else _FPS
         self.frame_dims = frame_ims if frame_ims is not None else _FRAME_DIMS
@@ -85,6 +89,7 @@ class FFmpegStreamer:
             self.fps, self.frame_dims,
             youtube_url=self.youtube_url,
             audio_pipe_fd=audio_pipe_fd,
+            audio_sample_rate=audio_sample_rate,
         )
         self.process = None
         self._start_process()
