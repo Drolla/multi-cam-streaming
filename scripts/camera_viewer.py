@@ -34,6 +34,7 @@ import argparse
 import yaml
 from multi_cam_streaming import camera_manager
 from multi_cam_streaming import ffmpeg
+from multi_cam_streaming.audio_manager import AudioManager
 from multi_cam_streaming.audio_mixer import AudioMixer
 from multi_cam_streaming.frame_compositor import FrameCompositor
 
@@ -165,11 +166,13 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
             print("No cameras found.")
             return
 
+        audio_mgr = None
         audio_mixer = None
         if audio_enabled:
             raw_entries = config.get('cameras', [])
-            audio_mixer = AudioMixer(raw_entries, cam_mgr.video_indexes,
-                                     pipe_needed=mode in ("stream", "both"))
+            audio_mgr = AudioManager(raw_entries, cam_mgr.video_indexes)
+            audio_mgr.open()
+            audio_mixer = AudioMixer(audio_mgr, pipe_needed=mode in ("stream", "both"))
             audio_mixer.open(output_device=effective_audio_output)
 
         audio_pipe_fd = audio_mixer.audio_pipe_fd if audio_mixer else None
@@ -232,6 +235,8 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
         finally:
             if audio_mixer is not None:
                 audio_mixer.close()
+            if audio_mgr is not None:
+                audio_mgr.close()
             if youtube_stream is not None:
                 youtube_stream.cleanup()
             if mode in ("display", "both"):
