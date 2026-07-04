@@ -41,15 +41,6 @@ youtube:
   stream_key: "${YOUTUBE_STREAM_KEY}"
   rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
 
-# Audio mixing: blend microphone audio from each camera weighted by motion score.
-# Requires sounddevice (all platforms) and pyudev (Linux) to be installed.
-# Built-in mics on USB cameras are auto-detected; use the 'mic' field per camera
-# entry to override or to assign a mic to cameras without auto-detectable audio.
-audio:
-  enabled: false   # set to true to enable live audio mixing
-  # output: "Speakers"  # optional: substring of output device name for local playback;
-  #                     # can also be set via --audio-output on the command line (CLI takes priority)
-
 # Duration in seconds for the alpha-blend transition when the layout or camera
 # assignment changes (set to 0 to disable transitions).
 transition_duration: 0.5
@@ -91,3 +82,15 @@ layouts:
       - {pos: [0.75, 0.00], size: 0.25}  # slot 1 — right-top overlay
       - {pos: [0.75, 0.25], size: 0.25}  # slot 2 — right-mid overlay
       - {pos: [0.00, 0.75], size: 0.25}  # slot 3 — bottom-left overlay
+
+
+# Audio settings
+
+# Audio mixing: blend microphone audio from each camera weighted by motion score.
+# Requires sounddevice (all platforms) and pyudev (Linux) to be installed.
+# Built-in mics on USB cameras are auto-detected; use the 'mic' field per camera
+# entry to override or to assign a mic to cameras without auto-detectable audio.
+audio:
+  enabled: false   # set to true to enable live audio mixing
+  # output: "Speakers"  # optional: substring of output device name for local playback;
+  #                     # can also be set via --audio-output on the command line (CLI takes priority)
