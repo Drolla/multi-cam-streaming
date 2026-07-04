@@ -19,6 +19,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
     "Operating System :: POSIX :: BSD",
+    "Operating System :: Microsoft :: Windows",
     "Topic :: Multimedia :: Video :: Capture",
     "Development Status :: 4 - Beta",
 ]

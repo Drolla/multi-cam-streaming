@@ -13,11 +13,11 @@ Stream multiple camera feeds to YouTube in real-time. Supports USB, CSI, and oth
 
 ## Requirements
 
-- Python 3.7+
+- Python 3.10+
 - FFmpeg installed and in PATH
 - v4l-utils (Linux/Raspberry Pi only, for camera detection)
 - pygrabber (Windows only, for camera detection — installed automatically)
-- sounddevice (optional, for audio mixing — installed automatically)
+- sounddevice (installed automatically)
 - pyudev (Linux only, optional, for automatic mic-to-camera matching — installed automatically)
 - Cameras supported by OpenCV (USB, CSI, IP cameras, etc.)
 
@@ -28,8 +28,8 @@ See [INSTALLATION.md](docs/INSTALLATION.md) for detailed setup instructions.
 Quick start:
 ```bash
 pip install -r requirements.txt
-cp config.example.yaml config.yaml
-# Edit config.yaml with your camera patterns and YouTube stream key
+cp config.example.yaml config_rpi.yaml
+# Edit config_rpi.yaml with your camera patterns and YouTube stream key
 ```
 
 ## Usage

@@ -31,8 +31,7 @@ class AudioMixer:
     Usage::
 
         with AudioManager(camera_entries, video_indexes) as mgr:
-            with AudioMixer(mgr, pipe_needed=True) as mixer:
-                mixer.open(output_device="Speakers")
+            with AudioMixer(mgr, pipe_needed=True, output_device="Speakers") as mixer:
                 streamer = FFmpegStreamer(..., audio_pipe_fd=mixer.audio_pipe_fd,
                                          audio_sample_rate=mixer.audio_sample_rate)
                 while True:

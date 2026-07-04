@@ -2,12 +2,12 @@
 
 ## System Requirements
 
-- Python 3.7 or higher
+- Python 3.10 or higher
 - FFmpeg installed and in PATH
 - Cameras supported by OpenCV (USB, CSI, IP cameras, etc.)
 - v4l-utils — Linux/Raspberry Pi only, for camera detection
 - pygrabber — Windows only, installed automatically via pip
-- sounddevice — optional, for motion-weighted audio mixing, installed automatically via pip
+- sounddevice — installed automatically via pip
 - pyudev — Linux only, optional, for automatic mic-to-camera matching, installed automatically via pip
 
 ## Linux / Raspberry Pi Setup
@@ -47,8 +47,8 @@ pip install -r requirements.txt
 ### 5. Configure the Application
 
 ```bash
-cp config.example.yaml config.yaml
-nano config.yaml  # Edit with your settings
+cp config.example.yaml config_rpi.yaml
+nano config_rpi.yaml  # Edit with your settings
 ```
 
 ### 6. Set YouTube Credentials
@@ -114,8 +114,8 @@ pygrabber is installed automatically on Windows and is used for camera detection
 ### 5. Configure the Application
 
 ```powershell
-copy config.example.yaml config.yaml
-notepad config.yaml
+copy config.example.yaml config_windows.yaml
+notepad config_windows.yaml
 ```
 
 ### 6. Set YouTube Credentials

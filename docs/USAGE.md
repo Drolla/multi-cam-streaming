@@ -68,6 +68,18 @@ python3 scripts/camera_viewer.py --audio-output "Speakers"
 The output device can also be set permanently in the config (`audio: output: "Speakers"`);
 `--audio-output` on the command line takes priority over the config value.
 
+### Show Motion Debug Window
+Displays a debug window with the reduced grayscale images and motion scores used for camera assignment.
+```bash
+python3 scripts/camera_viewer.py --show-motion-debug
+```
+
+### Set Log Level
+Override the log level from the command line (also configurable via `log_level:` in the config file).
+```bash
+python3 scripts/camera_viewer.py --log-level DEBUG
+```
+
 ### If installed as command
 ```bash
 stream-to-youtube
@@ -77,6 +89,8 @@ stream-to-youtube --config custom.yaml --mode stream
 stream-to-youtube --list-cameras
 stream-to-youtube --list-audio-devices
 stream-to-youtube --audio-output "Speakers"
+stream-to-youtube --show-motion-debug
+stream-to-youtube --log-level DEBUG
 ```
 
 ### Controls
@@ -90,6 +104,8 @@ stream-to-youtube --audio-output "Speakers"
 See `config.example.yaml` for a fully annotated reference. Key sections:
 
 ```yaml
+log_level: WARNING  # optional: DEBUG, INFO, WARNING, or ERROR (default WARNING)
+
 # Each entry is a plain pattern string or a dict with optional per-camera attributes.
 cameras:
   - "usb.*0-1"
@@ -186,11 +202,7 @@ cameras:
 ### FFmpeg errors during streaming
 - Verify YouTube stream key is correct
 - Check internet connection
-- View FFmpeg logs by uncommenting in ffmpeg.py:
-  ```python
-  #stdout=subprocess.DEVNULL,
-  #stderr=subprocess.DEVNULL,
-  ```
+- FFmpeg output (progress, errors) is printed directly to the terminal by default — check the terminal output for error messages
 
 ### Permission denied accessing cameras
 ```bash
