@@ -1,16 +1,18 @@
 """Camera discovery and lifecycle management for OpenCV-compatible devices."""
-import cv2
-import subprocess
-import re
-import platform
 import logging
-from typing import List, Dict
+import platform
+import re
+import subprocess
+
+import cv2
+
+log = logging.getLogger(__name__)
 
 
 class CameraManager:
     """Manage opening and closing of cameras."""
-    
-    def __init__(self, identifier_list: List):
+
+    def __init__(self, identifier_list: list):
         """Initialize the camera manager.
 
         Args:
@@ -19,15 +21,15 @@ class CameraManager:
         """
         self.identifier_list = identifier_list
         # Unique opened captures (one per physical device); used for configuration and release.
-        self.cameras: List[cv2.VideoCapture] = []
+        self.cameras: list[cv2.VideoCapture] = []
         # One entry per identifier slot, in config order. Slots that resolve to the same
         # physical device share (reference) the same capture object.
-        self.frame_sources: List[cv2.VideoCapture] = []
+        self.frame_sources: list[cv2.VideoCapture] = []
         # OpenCV/v4l2 device index per identifier slot (-1 if unmatched).
-        self.video_indexes: List[int] = []
+        self.video_indexes: list[int] = []
 
     @staticmethod
-    def _get_v4l2_device_indexes() -> Dict[str, int]:
+    def _get_v4l2_device_indexes() -> dict[str, int]:
         """Get available cameras from v4l2-ctl (Linux only)."""
         try:
             result = subprocess.run(
@@ -49,11 +51,11 @@ class CameraManager:
                 devices[current] = device_index
                 current = None
 
-        logging.debug("Found cameras (Linux): %s", devices)
+        log.debug("Found cameras (Linux): %s", devices)
         return devices
 
     @staticmethod
-    def _get_windows_device_indexes() -> Dict[str, int]:
+    def _get_windows_device_indexes() -> dict[str, int]:
         """Get available cameras using DirectShow (Windows only)."""
         try:
             from pygrabber.dshow_graph import FilterGraph
@@ -77,10 +79,10 @@ class CameraManager:
 
             devices[final_name] = idx
 
-        logging.debug("Found cameras (Windows): %s", devices)
+        log.debug("Found cameras (Windows): %s", devices)
         return devices
 
-    def _get_device_indexes(self) -> Dict[str, int]:
+    def _get_device_indexes(self) -> dict[str, int]:
         system = platform.system()
 
         if system == "Linux":
@@ -101,7 +103,7 @@ class CameraManager:
         all_camera_indexes = self._get_device_indexes()
 
         # Map a device index to its already-open capture so duplicate selections share it.
-        opened: Dict[int, cv2.VideoCapture] = {}
+        opened: dict[int, cv2.VideoCapture] = {}
 
         for entry in self.identifier_list:
             identifier = entry if isinstance(entry, str) else entry['pattern']
@@ -114,7 +116,7 @@ class CameraManager:
                 None,
             )
             if match is None:
-                logging.warning("No camera matched pattern '%s'", identifier)
+                log.warning("No camera matched pattern '%s'", identifier)
                 self.video_indexes.append(-1)
                 continue
 
@@ -123,7 +125,7 @@ class CameraManager:
             if cap is None:
                 cap = cv2.VideoCapture(camera_index)
                 if not cap.isOpened():
-                    logging.warning("Camera '%s' (index %d) failed to open", camera_name, camera_index)
+                    log.warning("Camera '%s' (index %d) failed to open", camera_name, camera_index)
                     self.video_indexes.append(-1)
                     continue
                 opened[camera_index] = cap

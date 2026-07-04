@@ -16,6 +16,10 @@ _CHANGE_THRESHOLD = 0.05     # min absolute score delta required to accept a lay
 _MIN_SWITCH_INTERVAL = 5.0   # minimum seconds between accepted layout/assignment changes
 _TRANSITION_DURATION = 0.5   # seconds to animate slot geometry and alpha-blend on layout change
 
+_COLOR_DARK_GRAY = (40, 40, 40)    # background fill for text overlays
+_COLOR_MID_GRAY  = (80, 80, 80)    # background fill for timestamp bar
+_COLOR_WHITE     = (255, 255, 255) # text color
+
 
 def _lerp(a, b, t):
     return a + (b - a) * t
@@ -345,9 +349,9 @@ class FrameCompositor:
             panel = cv2.cvtColor(diff_img, cv2.COLOR_GRAY2BGR)
             bar = f"{score:.4f} {'*' * int(score / max_score * _DEBUG_BAR_WIDTH):<{_DEBUG_BAR_WIDTH}}"
             h = panel.shape[0]
-            cv2.rectangle(panel, (0, h - 14), (panel.shape[1], h), (40, 40, 40), -1)
+            cv2.rectangle(panel, (0, h - 14), (panel.shape[1], h), _COLOR_DARK_GRAY, -1)
             cv2.putText(panel, bar, (2, h - 3),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.3, _COLOR_WHITE, 1)
             panels.append(panel)
         if panels:
             target_h = max(p.shape[0] for p in panels)
@@ -417,11 +421,11 @@ class FrameCompositor:
             canvas[y1:y2, x1:x2] = resized[ry1:ry1 + (y2 - y1), rx1:rx1 + (x2 - x1)]
 
             cv2.putText(canvas, str(cam_idx), (max(px + 5, 5), max(py + 20, 20)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, _COLOR_WHITE, 1)
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cv2.rectangle(canvas, (0, H - 15), (120, H), (80, 80, 80), -1)
+        cv2.rectangle(canvas, (0, H - 15), (120, H), _COLOR_MID_GRAY, -1)
         cv2.putText(canvas, timestamp, (3, H - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255))
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.3, _COLOR_WHITE)
 
         return canvas

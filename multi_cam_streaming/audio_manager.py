@@ -14,9 +14,12 @@ import sounddevice as sd
 log = logging.getLogger(__name__)
 
 _SAMPLE_RATE = 48000  # default; overridden per-device by querying device's native rate
+SAMPLE_RATE: int = 48000  # public constant for use by other modules
 _CHANNELS = 1         # mono
 _DTYPE = 'int16'
-_BLOCK_SIZE = 1024    # samples per callback block
+_BLOCK_SIZE = 1024        # samples per callback block
+_MAX_ALSA_CARDS = 32      # upper bound for scanning ALSA card numbers
+_AUDIO_QUEUE_MAXSIZE = 8  # per-device input buffer depth
 
 
 def _sd_input_devices() -> list[tuple[int, str]]:
@@ -66,7 +69,7 @@ def _match_linux_usb(video_index: int, input_devices: list[tuple[int, str]]) -> 
 
     alsa_card_to_sd: dict[int, int] = {}
     for sd_idx, name in input_devices:
-        for card_num in range(32):
+        for card_num in range(_MAX_ALSA_CARDS):
             if f'hw:{card_num},' in name or f'card{card_num}' in name.lower():
                 alsa_card_to_sd[card_num] = sd_idx
                 break
@@ -162,7 +165,7 @@ class AudioManager:
         sd_idx_to_queue: dict[int, queue.Queue] = {}
         for sd_idx in self.cam_to_sd.values():
             if sd_idx not in sd_idx_to_queue:
-                sd_idx_to_queue[sd_idx] = queue.Queue(maxsize=8)
+                sd_idx_to_queue[sd_idx] = queue.Queue(maxsize=_AUDIO_QUEUE_MAXSIZE)
 
         self.buffers = {
             cam_pos: sd_idx_to_queue[sd_idx]
@@ -210,9 +213,16 @@ class AudioManager:
                 pass
         self._streams.clear()
 
+    @property
+    def camera_count(self) -> int:
+        """Return the number of configured camera slots."""
+        return len(self._camera_entries)
+
     def __enter__(self):
+        """Open audio streams and return self."""
         self.open()
         return self
 
     def __exit__(self, *args):
+        """Close all audio streams."""
         self.close()

@@ -22,6 +22,8 @@ from multi_cam_streaming.audio_manager import (
 
 log = logging.getLogger(__name__)
 
+_MIX_QUEUE_MAXSIZE = 4  # intentionally smaller than input queue; stale audio is dropped quickly
+
 
 class AudioMixer:
     """Mix PCM blocks from an AudioManager weighted by per-camera motion scores.
@@ -37,21 +39,25 @@ class AudioMixer:
                     mixer.set_weights(motion_scores)
     """
 
-    def __init__(self, audio_manager: AudioManager, pipe_needed: bool = True):
+    def __init__(self, audio_manager: AudioManager, pipe_needed: bool = True,
+                 output_device: str | None = None):
         """
         Args:
-            audio_manager: An already-open AudioManager providing buffers and cam_to_sd.
-            pipe_needed:   True when FFmpeg will consume the audio pipe (stream/both modes).
-                           False for display-only mode — pipe creation is skipped.
+            audio_manager:  An already-open AudioManager providing buffers and cam_to_sd.
+            pipe_needed:    True when FFmpeg will consume the audio pipe (stream/both modes).
+                            False for display-only mode — pipe creation is skipped.
+            output_device:  Index (as string) or name substring for local speaker playback.
+                            Stored so __enter__ can call open() without arguments.
         """
         self._mgr = audio_manager
         self._pipe_needed = pipe_needed
+        self._output_device = output_device
         self._weights = np.zeros(0, dtype=np.float32)
         self._mix_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._pipe_write_fd: int | None = None
         self._out_stream: sd.OutputStream | None = None
-        self._out_queue: queue.Queue = queue.Queue(maxsize=4)
+        self._out_queue: queue.Queue = queue.Queue(maxsize=_MIX_QUEUE_MAXSIZE)
 
         self.audio_pipe_fd: int | None = None   # readable fd — passed to FFmpeg
         self.audio_sample_rate: int = _SAMPLE_RATE
@@ -67,7 +73,7 @@ class AudioMixer:
             log.warning("AudioManager has no matched mics; mixer will produce silence")
             return
 
-        n_cams = len(self._mgr._camera_entries)
+        n_cams = self._mgr.camera_count
         self._weights = np.ones(n_cams, dtype=np.float32) / max(n_cams, 1)
         self.audio_sample_rate = self._mgr.sample_rate
 
@@ -211,8 +217,10 @@ class AudioMixer:
             self.audio_pipe_fd = None
 
     def __enter__(self):
-        self.open()
+        """Open the mixer and return self."""
+        self.open(self._output_device)
         return self
 
     def __exit__(self, *args):
+        """Stop the mix thread and release all resources."""
         self.close()

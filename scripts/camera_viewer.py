@@ -20,21 +20,25 @@ Configuration is loaded from a YAML file. See config.example.yaml for format. Ca
 assigned to layout slots dynamically by motion priority: the most active camera fills
 the highest-priority slot (slot 0), and so on.
 """
+import argparse
+import contextlib
+import logging
+import os
 import sys
+import time
 from pathlib import Path
 
 # Add parent directory to path so we can import multi_cam_streaming
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import cv2
-import logging
-import time
 import numpy as np
-import argparse
+import sounddevice as sd
 import yaml
+
 from multi_cam_streaming import camera_manager
 from multi_cam_streaming import ffmpeg
-from multi_cam_streaming.audio_manager import AudioManager
+from multi_cam_streaming.audio_manager import AudioManager, SAMPLE_RATE as _AUDIO_SAMPLE_RATE
 from multi_cam_streaming.audio_mixer import AudioMixer
 from multi_cam_streaming.frame_compositor import FrameCompositor
 
@@ -69,7 +73,6 @@ def _parse_camera_entry(entry):
 
 def load_config(config_path):
     """Load and return config from a YAML file, expanding environment variables."""
-    import os
     with open(config_path, 'r') as f:
         content = f.read()
     content = os.path.expandvars(content)
@@ -106,7 +109,6 @@ def list_cameras():
 
 def list_audio_devices():
     """Print all available audio input and output devices."""
-    import sounddevice as sd
     devices = sd.query_devices()
     default_in = sd.default.device[0]
     default_out = sd.default.device[1]
@@ -166,85 +168,83 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
             print("No cameras found.")
             return
 
-        audio_mgr = None
-        audio_mixer = None
-        if audio_enabled:
-            raw_entries = config.get('cameras', [])
-            audio_mgr = AudioManager(raw_entries, cam_mgr.video_indexes)
-            audio_mgr.open()
-            audio_mixer = AudioMixer(audio_mgr, pipe_needed=mode in ("stream", "both"))
-            audio_mixer.open(output_device=effective_audio_output)
+        raw_entries = config.get('cameras', [])
+        audio_mgr_ctx = (
+            AudioManager(raw_entries, cam_mgr.video_indexes)
+            if audio_enabled else contextlib.nullcontext()
+        )
 
-        audio_pipe_fd = audio_mixer.audio_pipe_fd if audio_mixer else None
-        audio_sample_rate = audio_mixer.audio_sample_rate if audio_mixer else 48000
+        with audio_mgr_ctx as audio_mgr:
+            audio_mixer_ctx = (
+                AudioMixer(audio_mgr, pipe_needed=mode in ("stream", "both"),
+                           output_device=effective_audio_output)
+                if audio_enabled else contextlib.nullcontext()
+            )
 
-        youtube_stream = None
-        if mode in ("stream", "both"):
-            youtube_stream = ffmpeg.FFmpegStreamer(youtube_url=youtube_url, fps=fps,
-                                                  frame_ims=output_dims,
-                                                  audio_pipe_fd=audio_pipe_fd,
-                                                  audio_sample_rate=audio_sample_rate)
+            with audio_mixer_ctx as audio_mixer:
+                audio_pipe_fd = audio_mixer.audio_pipe_fd if audio_mixer else None
+                audio_sample_rate = audio_mixer.audio_sample_rate if audio_mixer else _AUDIO_SAMPLE_RATE
 
-        motion_cfg = config.get('motion', {})
-        compositor = FrameCompositor(
-            layouts, output_dims,
-            cam_attrs=list(cam_attrs),
-            motion_log_interval=float(motion_cfg.get('check_interval', _DEFAULT_MOTION_CHECK_INTERVAL)),
-            motion_threshold=int(motion_cfg.get('threshold', _DEFAULT_MOTION_THRESHOLD)),
-            motion_change_threshold=float(motion_cfg.get('change_threshold', _DEFAULT_MOTION_CHANGE_THRESHOLD)),
-            min_switch_interval=float(motion_cfg.get('min_switch_interval', _DEFAULT_MIN_SWITCH_INTERVAL)),
-            transition_duration=float(config.get('transition_duration', _DEFAULT_TRANSITION_DURATION)),
-            show_motion_debug=show_motion_debug)
+                youtube_stream = None
+                if mode in ("stream", "both"):
+                    youtube_stream = ffmpeg.FFmpegStreamer(youtube_url=youtube_url, fps=fps,
+                                                          frame_dims=output_dims,
+                                                          audio_pipe_fd=audio_pipe_fd,
+                                                          audio_sample_rate=audio_sample_rate)
 
-        last_score_count = 0
-        last_time = time.time()
-        try:
-            while True:
-                frames = read_frames(cam_mgr.frame_sources, output_dims)
-                combined = compositor.process(frames)
+                motion_cfg = config.get('motion', {})
+                compositor = FrameCompositor(
+                    layouts, output_dims,
+                    cam_attrs=list(cam_attrs),
+                    motion_log_interval=float(motion_cfg.get('check_interval', _DEFAULT_MOTION_CHECK_INTERVAL)),
+                    motion_threshold=int(motion_cfg.get('threshold', _DEFAULT_MOTION_THRESHOLD)),
+                    motion_change_threshold=float(motion_cfg.get('change_threshold', _DEFAULT_MOTION_CHANGE_THRESHOLD)),
+                    min_switch_interval=float(motion_cfg.get('min_switch_interval', _DEFAULT_MIN_SWITCH_INTERVAL)),
+                    transition_duration=float(config.get('transition_duration', _DEFAULT_TRANSITION_DURATION)),
+                    show_motion_debug=show_motion_debug)
 
-                if audio_mixer is not None:
-                    scores = compositor.motion_scores
-                    if scores and len(scores) != last_score_count:
-                        last_score_count = len(scores)
-                    if scores:
-                        total = sum(scores)
-                        weights = [s / total for s in scores] if total > 0 else \
-                                  [1.0 / len(scores)] * len(scores)
-                        audio_mixer.set_weights(weights)
-
-                if mode in ("display", "both"):
-                    cv2.imshow("multi_cam_streaming", combined)
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        print("'q' pressed, exiting...")
-                        break
-
-                if mode in ("stream", "both") and youtube_stream is not None:
-                    youtube_stream.write_frame(combined)
-
-                now = time.time()
-                delay = last_time + 1.0 / fps - now
-                if delay > 0:
-                    time.sleep(delay)
-                    last_time += 1.0 / fps
-                else:
-                    last_time = now
-
-        except KeyboardInterrupt:
-            print("\nCtrl-C pressed, shutting down...")
-        finally:
-            if audio_mixer is not None:
-                audio_mixer.close()
-            if audio_mgr is not None:
-                audio_mgr.close()
-            if youtube_stream is not None:
-                youtube_stream.cleanup()
-            if mode in ("display", "both"):
+                last_time = time.time()
                 try:
-                    cv2.destroyAllWindows()
-                except Exception:
-                    pass
-            print("Resources released")
+                    while True:
+                        frames = read_frames(cam_mgr.frame_sources, output_dims)
+                        combined = compositor.process(frames)
+
+                        if audio_mixer is not None:
+                            scores = compositor.motion_scores
+                            if scores:
+                                total = sum(scores)
+                                weights = [s / total for s in scores] if total > 0 else \
+                                          [1.0 / len(scores)] * len(scores)
+                                audio_mixer.set_weights(weights)
+
+                        if mode in ("display", "both"):
+                            cv2.imshow("multi_cam_streaming", combined)
+                            if cv2.waitKey(1) & 0xFF == ord('q'):
+                                print("'q' pressed, exiting...")
+                                break
+
+                        if mode in ("stream", "both") and youtube_stream is not None:
+                            youtube_stream.write_frame(combined)
+
+                        now = time.time()
+                        delay = last_time + 1.0 / fps - now
+                        if delay > 0:
+                            time.sleep(delay)
+                            last_time += 1.0 / fps
+                        else:
+                            last_time = now
+
+                except KeyboardInterrupt:
+                    print("\nCtrl-C pressed, shutting down...")
+                finally:
+                    if youtube_stream is not None:
+                        youtube_stream.cleanup()
+                    if mode in ("display", "both"):
+                        try:
+                            cv2.destroyAllWindows()
+                        except Exception:
+                            pass
+                    print("Resources released")
 
 
 def main():
