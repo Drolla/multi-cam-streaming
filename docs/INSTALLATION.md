@@ -21,6 +21,8 @@ sudo apt-get install python3 python3-pip python3-venv
 sudo apt-get install ffmpeg
 sudo apt-get install v4l-utils
 sudo apt-get install libasound2-dev   # required by sounddevice for audio mixing
+sudo apt-get install libportaudio2    # PortAudio runtime required by sounddevice
+sudo apt install python3-sounddevice  # needed on some systems (e.g. Raspberry Pi) alongside pip install
 ```
 
 ### 2. Clone and Setup Project
