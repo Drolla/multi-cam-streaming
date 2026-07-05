@@ -49,15 +49,18 @@ python3 scripts/camera_viewer.py --mode both
 python3 scripts/camera_viewer.py --config custom.yaml --mode stream
 ```
 
-### List Available Cameras
+### List Available Cameras and Audio Devices
+Lists all detected camera devices, then all audio input devices (for the `mic:` camera config field) and output devices (for `--audio-output` / `audio: output:`).
 ```bash
-python3 scripts/camera_viewer.py --list-cameras
+python3 scripts/camera_viewer.py --list-devices
 ```
 
-### List Available Audio Devices
-Lists all audio input devices (for the `mic:` camera config field) and output devices (for `--audio-output` / `audio: output:`).
+### Generate Camera Config
+Prints a ready-to-edit `cameras:` YAML block, one entry per detected camera, with mics
+auto-matched where possible (Linux only) and every optional attribute shown as a commented
+placeholder. Paste the output into your config file and fill in/uncomment as needed.
 ```bash
-python3 scripts/camera_viewer.py --list-audio-devices
+python3 scripts/camera_viewer.py --print-device-config
 ```
 
 ### Play Mixed Audio to a Local Speaker
@@ -86,8 +89,8 @@ stream-to-youtube
 stream-to-youtube --mode display
 stream-to-youtube --mode both
 stream-to-youtube --config custom.yaml --mode stream
-stream-to-youtube --list-cameras
-stream-to-youtube --list-audio-devices
+stream-to-youtube --list-devices
+stream-to-youtube --print-device-config
 stream-to-youtube --audio-output "Speakers"
 stream-to-youtube --show-motion-debug
 stream-to-youtube --log-level DEBUG
@@ -165,7 +168,12 @@ read only once and reused.
 
 List the camera devices detected by this project (works on any platform):
 ```bash
-python3 scripts/camera_viewer.py --list-cameras
+python3 scripts/camera_viewer.py --list-devices
+```
+
+Or generate a `cameras:` YAML block to paste directly into your config file:
+```bash
+python3 scripts/camera_viewer.py --print-device-config
 ```
 
 On Linux/Raspberry Pi you can also use v4l-utils directly:

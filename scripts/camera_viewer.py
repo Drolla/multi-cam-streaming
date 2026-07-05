@@ -5,16 +5,17 @@ Supports three modes:
   - stream: Stream to YouTube via RTMP
   - both: Display locally and stream simultaneously
 
-The --list-cameras flag prints the available camera devices and exits, which is
-useful for filling in the cameras list in your config file.
+The --list-devices flag prints the available camera and audio devices and exits.
+The --print-device-config flag prints a ready-to-edit 'cameras:' YAML block for
+detected cameras, which is useful for filling in the cameras list in your config file.
 
 Usage:
     python camera_viewer.py                           # Streams to YouTube (default)
     python camera_viewer.py --mode display            # Display only
     python camera_viewer.py --mode both               # Display and stream
     python camera_viewer.py --config custom.yaml      # Use custom config file
-    python camera_viewer.py --list-cameras             # List available cameras and exit
-    python camera_viewer.py --list-audio-devices       # List available audio devices and exit
+    python camera_viewer.py --list-devices             # List available cameras and audio devices, exit
+    python camera_viewer.py --print-device-config      # Print a cameras: YAML block and exit
 
 Configuration is loaded from a YAML file. See config.example.yaml for format. Cameras are
 assigned to layout slots dynamically by motion priority: the most active camera fills
@@ -133,32 +134,39 @@ def list_audio_devices():
             print(f"  [{i}] {dev['name']}  ({api}){marker}")
 
 
-def list_devices_with_matches():
-    """Print camera devices with their likely microphone match, then all audio devices.
+def print_device_config():
+    """Print a ready-to-edit 'cameras:' YAML block, one entry per detected camera.
 
     Reuses AudioManager's own USB-topology matching (_match_linux_usb) so the
-    preview reflects exactly what AudioManager.open() would pick at runtime.
-    Only Linux exposes a reliable hardware match; other platforms report
-    every camera as unmatched rather than guessing from device names.
+    generated 'mic:' value reflects exactly what AudioManager.open() would pick
+    at runtime. Only Linux exposes a reliable hardware match; other platforms
+    get a commented placeholder instead of a guessed value. Every optional
+    attribute is included as a commented placeholder so the full set of knobs
+    is visible without consulting docs.
     """
     cm = camera_manager.CameraManager(identifier_list=[])
     cam_devices = cm._get_device_indexes()
+    if not cam_devices:
+        print("No camera devices found.")
+        return
+
     input_devices = _sd_input_devices()
     system = platform.system()
 
-    print("Available camera devices:")
+    print("cameras:")
     for name, index in cam_devices.items():
         match = _match_linux_usb(index, input_devices) if system == "Linux" else None
+        print(f'  - pattern: "{name}"')
         if match is not None:
             match_name = sd.query_devices(match)['name']
-            print(f"  - {name}: index {index}  ->  mic [{match}] {match_name}")
+            print(f'    mic: "{match_name}"')
         else:
             reason = ("no matching USB audio device found" if system == "Linux"
                        else "no reliable auto-match on this OS - assign via 'mic:' substring or index")
-            print(f"  - {name}: index {index}  ->  mic: unmatched ({reason})")
-
-    print()
-    list_audio_devices()
+            print(f"    # mic: <>  # {reason}")
+        print("    # min_slot: 0")
+        print("    # max_slot: <none>")
+        print("    # activity_multiplier: 1.0")
 
 
 def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
@@ -297,11 +305,6 @@ def main():
         help="Mode to run: display (local only), stream (YouTube only), or both"
     )
     parser.add_argument(
-        "--list-cameras",
-        action="store_true",
-        help="List available camera devices and exit"
-    )
-    parser.add_argument(
         "--log-level",
         type=str,
         default=None,
@@ -322,20 +325,27 @@ def main():
              "Overrides audio.output in config. Requires audio.enabled: true."
     )
     parser.add_argument(
-        "--list-audio-devices",
+        "--list-devices",
         action="store_true",
-        help="List available audio input (mic) and output (speaker) devices and exit."
+        help="List available camera devices and audio input (mic) / output (speaker) devices, then exit."
+    )
+    parser.add_argument(
+        "--print-device-config",
+        action="store_true",
+        help="Print a ready-to-edit 'cameras:' YAML block for detected cameras, with auto-matched "
+             "mics filled in where possible, and exit."
     )
 
     args = parser.parse_args()
 
-    if args.list_cameras or args.list_audio_devices:
-        if args.list_cameras and args.list_audio_devices:
-            list_devices_with_matches()
-        elif args.list_cameras:
-            list_cameras()
-        else:
-            list_audio_devices()
+    if args.list_devices:
+        list_cameras()
+        print()
+        list_audio_devices()
+        exit(0)
+
+    if args.print_device_config:
+        print_device_config()
         exit(0)
 
     config_path = Path(args.config)

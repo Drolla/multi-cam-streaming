@@ -69,7 +69,7 @@ nano config.yaml
 ### 7. Verify Camera Detection
 
 ```bash
-python3 scripts/camera_viewer.py --list-cameras
+python3 scripts/camera_viewer.py --list-devices
 ```
 
 ### 8. Verify Installation
@@ -135,7 +135,7 @@ $env:YOUTUBE_STREAM_KEY = "your-youtube-stream-key-here"
 ### 7. Verify Camera Detection
 
 ```powershell
-python scripts/camera_viewer.py --list-cameras
+python scripts/camera_viewer.py --list-devices
 ```
 
 ### 8. Verify Installation

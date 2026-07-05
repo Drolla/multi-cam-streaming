@@ -7,8 +7,8 @@
 #   activity_multiplier (float, default 1.0) — multiplied with raw score; >1 boosts, <1 suppresses
 #   mic (str, optional)          — substring pattern to match the camera's audio device name;
 #                                  auto-detected if omitted (USB cameras with built-in mics only)
-# Use: python scripts/camera_viewer.py --list-cameras --list-audio-devices  to discover device
-# names and see the suggested camera-to-mic match (Linux only; assign 'mic' manually elsewhere).
+# Use: python scripts/camera_viewer.py --print-device-config  to generate a cameras: block
+# with the suggested camera-to-mic match filled in (Linux only; assign 'mic' manually elsewhere).
 # The same camera can appear more than once; it is opened and read only once.
 cameras:
   - "usb.*0-1"
