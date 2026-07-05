@@ -1,5 +1,12 @@
 # Camera and streaming configuration
 
+######## Logging ########
+
+# Level: DEBUG, INFO, WARNING, ERROR (can be overridden with --log-level)
+log_level: WARNING
+
+######## Cameras ########
+
 # List of camera devices. Each entry is either a plain regex pattern string, or a dict
 # with a 'pattern' key plus optional per-camera attributes:
 #   min_slot (int, default 0)    — never placed in a slot with a lower index (0 = largest slot)
@@ -10,9 +17,9 @@
 #   volume_db (float, default 0.0) — gain applied to this camera's mic audio, in decibels;
 #                                  independent of activity_multiplier. Positive boosts, negative
 #                                  attenuates (e.g. 6 ≈ double perceived loudness, -6 ≈ half).
-# Use: python scripts/camera_viewer.py --print-device-config  to generate a cameras: block
-# with the suggested camera-to-mic match filled in (Linux only; assign 'mic' manually elsewhere).
-# The same camera and mic can appear more than once; it is opened and read only once.
+# Tip: python scripts/camera_viewer.py --print-device-config generates a cameras: block with the
+# suggested camera-to-mic match filled in (Linux only; assign 'mic' manually elsewhere). The same
+# camera and mic can appear more than once; it is opened and read only once.
 cameras:
   - "usb.*0-1"
   - pattern: "usb.*1-1"
@@ -24,8 +31,7 @@ cameras:
     mic: "ReSpeaker"           # explicit audio device name pattern (substring match)
     volume_db: 6               # this mic is quiet — boost it by 6dB
 
-# Logging level: DEBUG, INFO, WARNING, ERROR (can be overridden with --log-level)
-log_level: WARNING
+######## Motion Detection ########
 
 motion:
   check_interval: 1.0      # seconds between motion score computations
@@ -33,18 +39,13 @@ motion:
   change_threshold: 0.05   # min score delta (0.0–1.0) on any camera to consider a switch
   min_switch_interval: 5.0 # minimum seconds between accepted layout/assignment changes
 
+######## Display / Output ########
+
 # Output stream / display settings
 output:
   width: 1280
   height: 720
   fps: 30
-
-# YouTube stream configuration
-# IMPORTANT: Use environment variable for stream_key instead of hardcoding:
-# export YOUTUBE_STREAM_KEY="your-actual-key"
-youtube:
-  stream_key: "${YOUTUBE_STREAM_KEY}"
-  rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
 
 # Duration in seconds for the alpha-blend transition when the layout or camera
 # assignment changes (set to 0 to disable transitions).
@@ -88,8 +89,15 @@ layouts:
       - {pos: [0.75, 0.25], size: 0.25}  # slot 2 — right-mid overlay
       - {pos: [0.00, 0.75], size: 0.25}  # slot 3 — bottom-left overlay
 
+######## Streaming (YouTube) ########
 
-# Audio settings
+# IMPORTANT: Use environment variable for stream_key instead of hardcoding:
+# export YOUTUBE_STREAM_KEY="your-actual-key"
+youtube:
+  stream_key: "${YOUTUBE_STREAM_KEY}"
+  rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
+
+######## Audio ########
 
 # Audio mixing: blend microphone audio from each camera weighted by motion score.
 # Requires sounddevice (all platforms) and pyudev (Linux) to be installed.

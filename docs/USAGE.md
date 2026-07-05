@@ -130,14 +130,6 @@ output:
   height: 720
   fps: 30
 
-youtube:
-  stream_key: "${YOUTUBE_STREAM_KEY}"
-  rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
-
-audio:
-  enabled: false  # set to true to mix microphone audio weighted by motion score
-  # output: "Speakers"  # optional: play mixed audio to this local output device (substring match)
-
 transition_duration: 0.5   # seconds to animate between layouts
 
 layouts:
@@ -147,6 +139,14 @@ layouts:
       - {pos: [0.5, 0.0], size: 0.5}  # slot 1 — top-right
       - {pos: [0.0, 0.5], size: 0.5}  # slot 2 — bottom-left
       - {pos: [0.5, 0.5], size: 0.5}  # slot 3 — bottom-right
+
+youtube:
+  stream_key: "${YOUTUBE_STREAM_KEY}"
+  rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
+
+audio:
+  enabled: false  # set to true to mix microphone audio weighted by motion score
+  # output: "Speakers"  # optional: play mixed audio to this local output device (substring match)
 ```
 
 Cameras are assigned to layout slots dynamically by **motion priority**: the camera
