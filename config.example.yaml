@@ -9,7 +9,7 @@
 #                                  auto-detected if omitted (USB cameras with built-in mics only)
 # Use: python scripts/camera_viewer.py --print-device-config  to generate a cameras: block
 # with the suggested camera-to-mic match filled in (Linux only; assign 'mic' manually elsewhere).
-# The same camera can appear more than once; it is opened and read only once.
+# The same camera and mic can appear more than once; it is opened and read only once.
 cameras:
   - "usb.*0-1"
   - pattern: "usb.*1-1"
