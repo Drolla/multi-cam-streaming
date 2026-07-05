@@ -54,6 +54,32 @@ python3 scripts/camera_viewer.py --config custom.yaml --mode stream
 python3 scripts/camera_viewer.py --list-cameras
 ```
 
+### List Available Audio Devices
+Lists all audio input devices (for the `mic:` camera config field) and output devices (for `--audio-output` / `audio: output:`).
+```bash
+python3 scripts/camera_viewer.py --list-audio-devices
+```
+
+### Play Mixed Audio to a Local Speaker
+Requires `audio: enabled: true` in your config. The device name is a substring match.
+```bash
+python3 scripts/camera_viewer.py --audio-output "Speakers"
+```
+The output device can also be set permanently in the config (`audio: output: "Speakers"`);
+`--audio-output` on the command line takes priority over the config value.
+
+### Show Motion Debug Window
+Displays a debug window with the reduced grayscale images and motion scores used for camera assignment.
+```bash
+python3 scripts/camera_viewer.py --show-motion-debug
+```
+
+### Set Log Level
+Override the log level from the command line (also configurable via `log_level:` in the config file).
+```bash
+python3 scripts/camera_viewer.py --log-level DEBUG
+```
+
 ### If installed as command
 ```bash
 stream-to-youtube
@@ -61,6 +87,10 @@ stream-to-youtube --mode display
 stream-to-youtube --mode both
 stream-to-youtube --config custom.yaml --mode stream
 stream-to-youtube --list-cameras
+stream-to-youtube --list-audio-devices
+stream-to-youtube --audio-output "Speakers"
+stream-to-youtube --show-motion-debug
+stream-to-youtube --log-level DEBUG
 ```
 
 ### Controls
@@ -74,6 +104,8 @@ stream-to-youtube --list-cameras
 See `config.example.yaml` for a fully annotated reference. Key sections:
 
 ```yaml
+log_level: WARNING  # optional: DEBUG, INFO, WARNING, or ERROR (default WARNING)
+
 # Each entry is a plain pattern string or a dict with optional per-camera attributes.
 cameras:
   - "usb.*0-1"
@@ -81,6 +113,8 @@ cameras:
     min_slot: 1              # never fills slot 0 (largest)
     max_slot: 2              # never fills slots beyond 2
     activity_multiplier: 1.5 # perceived activity boosted 50%
+  - pattern: "csi-camera"   # CSI or other camera without auto-detectable mic
+    mic: "ReSpeaker"         # explicit audio device name pattern (substring match)
 
 motion:
   check_interval: 1.0      # seconds between motion score computations
@@ -96,6 +130,10 @@ output:
 youtube:
   stream_key: "${YOUTUBE_STREAM_KEY}"
   rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
+
+audio:
+  enabled: false  # set to true to mix microphone audio weighted by motion score
+  # output: "Speakers"  # optional: play mixed audio to this local output device (substring match)
 
 transition_duration: 0.5   # seconds to animate between layouts
 
@@ -164,11 +202,7 @@ cameras:
 ### FFmpeg errors during streaming
 - Verify YouTube stream key is correct
 - Check internet connection
-- View FFmpeg logs by uncommenting in ffmpeg.py:
-  ```python
-  #stdout=subprocess.DEVNULL,
-  #stderr=subprocess.DEVNULL,
-  ```
+- FFmpeg output (progress, errors) is printed directly to the terminal by default — check the terminal output for error messages
 
 ### Permission denied accessing cameras
 ```bash
@@ -220,13 +254,13 @@ sudo journalctl -u multi-cam-stream -f
 
 ### Adjust Video Quality
 
-Modify your config file for better quality (higher bitrate in FFmpeg):
+Modify your config file to change resolution or frame rate:
 
 ```yaml
-frame_dims:
-  width: 640
-  height: 480
-fps: 60
+output:
+  width: 1920
+  height: 1080
+  fps: 60
 ```
 
 ### Multiple Streams
