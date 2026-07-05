@@ -104,7 +104,8 @@ class AudioManager:
     def __init__(self, camera_entries: list, video_indexes: list[int]):
         """
         Args:
-            camera_entries: Raw camera config entries (str or dict with optional 'mic' key).
+            camera_entries: Raw camera config entries (str or dict with optional 'mic'
+                            and 'volume_db' keys).
             video_indexes:  OpenCV device indexes in the same order as camera_entries.
                             Use -1 for cameras with no numeric video index.
         """
@@ -117,6 +118,7 @@ class AudioManager:
         self.buffers: dict[int, queue.Queue] = {}      # cam_pos → PCM block queue
         self.sample_rates: dict[int, int] = {}         # cam_pos → sample rate (Hz)
         self.sample_rate: int = _SAMPLE_RATE           # representative rate (first opened)
+        self.cam_volumes: dict[int, float] = {}        # cam_pos → linear gain (from 'volume_db')
 
     def open(self) -> None:
         """Discover mic devices and open one InputStream per unique physical device."""
@@ -128,6 +130,8 @@ class AudioManager:
             mic_pattern = entry.get('mic') if isinstance(entry, dict) else None
             video_idx = (self._video_indexes[cam_pos]
                          if cam_pos < len(self._video_indexes) else -1)
+            volume_db = float(entry.get('volume_db', 0.0)) if isinstance(entry, dict) else 0.0
+            self.cam_volumes[cam_pos] = 10 ** (volume_db / 20)
             sd_idx = None
 
             # Priority 1: explicit mic pattern from config

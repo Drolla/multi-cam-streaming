@@ -23,6 +23,26 @@ from multi_cam_streaming.audio_manager import (
 log = logging.getLogger(__name__)
 
 _MIX_QUEUE_MAXSIZE = 4  # intentionally smaller than input queue; stale audio is dropped quickly
+_FULL_SCALE = 32768.0   # int16 full-scale magnitude, used as the 0 dBFS reference
+
+
+def _apply_compression(mixed: np.ndarray, threshold_db: float, ratio_db: float) -> np.ndarray:
+    """Apply a simplified soft-knee compressor to a mixed int32 PCM block.
+
+    Computes a single gain factor from the block's peak level and applies it
+    uniformly - no attack/release envelope or lookahead, just an instantaneous
+    per-block gain. Blocks are already small (~21ms at 48kHz), so this is a
+    reasonable approximation without the complexity of real envelope tracking.
+    """
+    peak = float(np.max(np.abs(mixed)))
+    if peak <= 0:
+        return mixed
+    level_db = 20 * np.log10(peak / _FULL_SCALE)
+    if level_db <= threshold_db:
+        return mixed
+    gain_reduction_db = (level_db - threshold_db) * (1 - 1 / ratio_db)
+    gain = 10 ** (-gain_reduction_db / 20)
+    return (mixed.astype(np.float64) * gain).astype(np.int32)
 
 
 class AudioMixer:
@@ -39,7 +59,8 @@ class AudioMixer:
     """
 
     def __init__(self, audio_manager: AudioManager, pipe_needed: bool = True,
-                 output_device: str | None = None):
+                 output_device: str | None = None, weight_smoothing: float = 0.0,
+                 compression: dict | None = None):
         """
         Args:
             audio_manager:  An already-open AudioManager providing buffers and cam_to_sd.
@@ -47,11 +68,20 @@ class AudioMixer:
                             False for display-only mode — pipe creation is skipped.
             output_device:  Index (as string) or name substring for local speaker playback.
                             Stored so __enter__ can call open() without arguments.
+            weight_smoothing: Time constant (seconds) for exponential smoothing of camera
+                            weights, so volume changes ramp instead of jumping. 0 disables
+                            smoothing (weights applied instantly, as before).
+            compression:    Optional {'threshold_db': float, 'ratio_db': float} soft-knee
+                            compressor settings applied to the final mixed signal. None
+                            disables compression.
         """
         self._mgr = audio_manager
         self._pipe_needed = pipe_needed
         self._output_device = output_device
-        self._weights = np.zeros(0, dtype=np.float32)
+        self._weight_smoothing = weight_smoothing
+        self._compression = compression
+        self._target_weights = np.zeros(0, dtype=np.float32)
+        self._smoothed_weights = np.zeros(0, dtype=np.float32)
         self._mix_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._start_gate = threading.Event()  # set when FFmpeg is ready to consume the pipe
@@ -74,7 +104,8 @@ class AudioMixer:
             return
 
         n_cams = self._mgr.camera_count
-        self._weights = np.ones(n_cams, dtype=np.float32) / max(n_cams, 1)
+        self._target_weights = np.ones(n_cams, dtype=np.float32) / max(n_cams, 1)
+        self._smoothed_weights = self._target_weights.copy()
         self.audio_sample_rate = self._mgr.sample_rate
 
         if self._pipe_needed:
@@ -135,17 +166,23 @@ class AudioMixer:
         self._mix_thread.start()
 
     def set_weights(self, scores: list[float]) -> None:
-        """Update per-camera volume weights from motion scores.
+        """Update per-camera target volume weights from motion scores.
 
         Called each scoring interval. Weights are normalised so they sum to 1
-        across matched mics only; unmatched cameras always get weight 0.
+        across matched mics only; unmatched cameras always get weight 0. The
+        mix loop ramps self._smoothed_weights toward this target every block
+        rather than applying it instantly (see weight_smoothing).
         """
         arr = np.array(scores, dtype=np.float32)
         for cam_pos in range(len(arr)):
             if cam_pos not in self._mgr.cam_to_sd:
                 arr[cam_pos] = 0.0
         total = arr.sum()
-        self._weights = arr / total if total > 0 else arr
+        self._target_weights = arr / total if total > 0 else arr
+        if len(self._smoothed_weights) != len(self._target_weights):
+            # Length changed (shouldn't normally happen mid-run) — snap instead of ramping
+            # from a mismatched array.
+            self._smoothed_weights = self._target_weights.copy()
 
     def signal_ready(self) -> None:
         """Release the mix loop to begin writing. Call after FFmpeg has started."""
@@ -157,6 +194,9 @@ class AudioMixer:
         silence = np.zeros(_BLOCK_SIZE, dtype=np.int32)
         first_rate = next(iter(self._mgr.sample_rates.values()), _SAMPLE_RATE)
         block_duration = _BLOCK_SIZE / first_rate
+        # One-pole smoothing coefficient; alpha=1.0 (instant) when smoothing is disabled.
+        alpha = (1 - np.exp(-block_duration / self._weight_smoothing)
+                 if self._weight_smoothing > 0 else 1.0)
 
         unique_queues = list({id(q): q for q in self._mgr.buffers.values()}.values())
 
@@ -167,8 +207,10 @@ class AudioMixer:
                 except queue.Empty:
                     continue
 
+                self._smoothed_weights += alpha * (self._target_weights - self._smoothed_weights)
+
                 mixed = silence.copy()
-                weights = self._weights
+                weights = self._smoothed_weights
                 seen: dict[int, np.ndarray] = {id(unique_queues[0]): primary_block}
 
                 for cam_pos, buf in self._mgr.buffers.items():
@@ -182,7 +224,12 @@ class AudioMixer:
                         except queue.Empty:
                             seen[buf_id] = np.zeros((_BLOCK_SIZE, _CHANNELS), dtype=_DTYPE)
                     block = seen[buf_id]
-                    mixed += (block[:, 0].astype(np.int32) * weight).astype(np.int32)
+                    volume = self._mgr.cam_volumes.get(cam_pos, 1.0)
+                    mixed += (block[:, 0].astype(np.int32) * volume * weight).astype(np.int32)
+
+                if self._compression is not None:
+                    mixed = _apply_compression(mixed, self._compression['threshold_db'],
+                                               self._compression['ratio_db'])
 
                 clipped = np.clip(mixed, -32768, 32767).astype(np.int16)
 
