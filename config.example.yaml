@@ -47,10 +47,6 @@ output:
   height: 720
   fps: 30
 
-# Duration in seconds for the alpha-blend transition when the layout or camera
-# assignment changes (set to 0 to disable transitions).
-transition_duration: 0.5
-
 # Layout definitions: the active layout is selected automatically each scoring
 # interval based on how dominant the top-scoring camera is relative to the others.
 # Layouts with unequal slot sizes (high emphasis) are chosen when one camera has
@@ -88,6 +84,10 @@ layouts:
       - {pos: [0.75, 0.00], size: 0.25}  # slot 1 — right-top overlay
       - {pos: [0.75, 0.25], size: 0.25}  # slot 2 — right-mid overlay
       - {pos: [0.00, 0.75], size: 0.25}  # slot 3 — bottom-left overlay
+
+# Duration in seconds for the alpha-blend transition when the layout or camera
+# assignment changes (set to 0 to disable transitions).
+transition_duration: 0.5
 
 ######## Streaming (YouTube) ########
 
