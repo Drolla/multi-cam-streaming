@@ -49,7 +49,6 @@ class FFmpegStreamer:
             "-y",
             "-fflags", "+genpts",
             "-use_wallclock_as_timestamps", "1",
-            "-re",  # read input at real-time speed
             "-f", "rawvideo",
             "-vcodec", "rawvideo",
             "-pix_fmt", "bgr24",
