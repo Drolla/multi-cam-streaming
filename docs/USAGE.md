@@ -125,7 +125,7 @@ motion:
   change_threshold: 0.05   # min score delta to consider a layout switch
   min_switch_interval: 5.0 # minimum seconds between accepted switches
 
-output:
+video:
   width: 1280
   height: 720
   fps: 30
@@ -265,7 +265,7 @@ sudo journalctl -u multi-cam-stream -f
 Modify your config file to change resolution or frame rate:
 
 ```yaml
-output:
+video:
   width: 1920
   height: 1080
   fps: 60

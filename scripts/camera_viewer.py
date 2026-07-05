@@ -179,10 +179,10 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
     ) if config['cameras'] else ([], [])
     camera_identifiers = list(camera_patterns)
 
-    output = config.get('output', {})
-    out_w = int(output.get('width', _DEFAULT_WIDTH))
-    out_h = int(output.get('height', _DEFAULT_HEIGHT))
-    fps = int(output.get('fps', _DEFAULT_FPS))
+    video = config.get('video', {})
+    out_w = int(video.get('width', _DEFAULT_WIDTH))
+    out_h = int(video.get('height', _DEFAULT_HEIGHT))
+    fps = int(video.get('fps', _DEFAULT_FPS))
     output_dims = (out_w, out_h)
 
     layouts = config.get('layouts', [])

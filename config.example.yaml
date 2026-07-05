@@ -39,10 +39,10 @@ motion:
   change_threshold: 0.05   # min score delta (0.0–1.0) on any camera to consider a switch
   min_switch_interval: 5.0 # minimum seconds between accepted layout/assignment changes
 
-######## Display / Output ########
+######## Display / Video ########
 
 # Output stream / display settings
-output:
+video:
   width: 1280
   height: 720
   fps: 30
