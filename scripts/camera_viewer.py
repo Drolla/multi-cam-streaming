@@ -191,6 +191,8 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
                                                           frame_dims=output_dims,
                                                           audio_pipe_fd=audio_pipe_fd,
                                                           audio_sample_rate=audio_sample_rate)
+                if audio_mixer is not None:
+                    audio_mixer.signal_ready()
 
                 motion_cfg = config.get('motion', {})
                 compositor = FrameCompositor(

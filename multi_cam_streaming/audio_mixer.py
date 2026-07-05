@@ -54,6 +54,7 @@ class AudioMixer:
         self._weights = np.zeros(0, dtype=np.float32)
         self._mix_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        self._start_gate = threading.Event()  # set when FFmpeg is ready to consume the pipe
         self._pipe_write_fd: int | None = None
         self._out_stream: sd.OutputStream | None = None
         self._out_queue: queue.Queue = queue.Queue(maxsize=_MIX_QUEUE_MAXSIZE)
@@ -79,6 +80,8 @@ class AudioMixer:
         if self._pipe_needed:
             pipe_read_fd, self._pipe_write_fd = os.pipe()
             self.audio_pipe_fd = pipe_read_fd
+        else:
+            self._start_gate.set()  # no pipe to fill — safe to start immediately
 
         if output_device is not None:
             out_devices = [
@@ -144,8 +147,13 @@ class AudioMixer:
         total = arr.sum()
         self._weights = arr / total if total > 0 else arr
 
+    def signal_ready(self) -> None:
+        """Release the mix loop to begin writing. Call after FFmpeg has started."""
+        self._start_gate.set()
+
     def _mix_loop(self) -> None:
         """Pace on the primary mic queue, mix weighted blocks, output PCM."""
+        self._start_gate.wait()  # hold until FFmpeg is ready to consume the pipe
         silence = np.zeros(_BLOCK_SIZE, dtype=np.int32)
         first_rate = next(iter(self._mgr.sample_rates.values()), _SAMPLE_RATE)
         block_duration = _BLOCK_SIZE / first_rate
