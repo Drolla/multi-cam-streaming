@@ -24,6 +24,7 @@ import argparse
 import contextlib
 import logging
 import os
+import platform
 import sys
 import time
 from pathlib import Path
@@ -38,7 +39,10 @@ import yaml
 
 from multi_cam_streaming import camera_manager
 from multi_cam_streaming import ffmpeg
-from multi_cam_streaming.audio_manager import AudioManager, SAMPLE_RATE as _AUDIO_SAMPLE_RATE
+from multi_cam_streaming.audio_manager import (
+    AudioManager, SAMPLE_RATE as _AUDIO_SAMPLE_RATE,
+    _sd_input_devices, _match_linux_usb,
+)
 from multi_cam_streaming.audio_mixer import AudioMixer
 from multi_cam_streaming.frame_compositor import FrameCompositor
 
@@ -127,6 +131,34 @@ def list_audio_devices():
             api = host_apis[dev['hostapi']]['name']
             marker = " *default*" if i == default_out else ""
             print(f"  [{i}] {dev['name']}  ({api}){marker}")
+
+
+def list_devices_with_matches():
+    """Print camera devices with their likely microphone match, then all audio devices.
+
+    Reuses AudioManager's own USB-topology matching (_match_linux_usb) so the
+    preview reflects exactly what AudioManager.open() would pick at runtime.
+    Only Linux exposes a reliable hardware match; other platforms report
+    every camera as unmatched rather than guessing from device names.
+    """
+    cm = camera_manager.CameraManager(identifier_list=[])
+    cam_devices = cm._get_device_indexes()
+    input_devices = _sd_input_devices()
+    system = platform.system()
+
+    print("Available camera devices:")
+    for name, index in cam_devices.items():
+        match = _match_linux_usb(index, input_devices) if system == "Linux" else None
+        if match is not None:
+            match_name = sd.query_devices(match)['name']
+            print(f"  - {name}: index {index}  ->  mic [{match}] {match_name}")
+        else:
+            reason = ("no matching USB audio device found" if system == "Linux"
+                       else "no reliable auto-match on this OS - assign via 'mic:' substring or index")
+            print(f"  - {name}: index {index}  ->  mic: unmatched ({reason})")
+
+    print()
+    list_audio_devices()
 
 
 def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
@@ -297,12 +329,13 @@ def main():
 
     args = parser.parse_args()
 
-    if args.list_cameras:
-        list_cameras()
-        exit(0)
-
-    if args.list_audio_devices:
-        list_audio_devices()
+    if args.list_cameras or args.list_audio_devices:
+        if args.list_cameras and args.list_audio_devices:
+            list_devices_with_matches()
+        elif args.list_cameras:
+            list_cameras()
+        else:
+            list_audio_devices()
         exit(0)
 
     config_path = Path(args.config)
