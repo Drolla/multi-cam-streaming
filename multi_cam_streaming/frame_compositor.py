@@ -1,5 +1,6 @@
 """Motion-based frame compositor that selects layouts and assigns cameras to slots."""
 import logging
+import math
 import time
 from datetime import datetime
 
@@ -23,6 +24,17 @@ _COLOR_WHITE     = (255, 255, 255) # text color
 
 def _lerp(a, b, t):
     return a + (b - a) * t
+
+
+def _log_normalize(raw_fraction):
+    """Map a linear pixel-change fraction (0.0-1.0) to a logarithmic 0.0-1.0 score.
+
+    Anchored so each halving of the raw fraction drops the score by 0.1: 100% -> 1.0,
+    50% -> 0.9, 25% -> 0.8, ~12% -> 0.7, ~6% -> 0.6, floored at 0.0 near the noise floor.
+    """
+    if raw_fraction <= 0.0:
+        return 0.0
+    return max(0.0, 1 + math.log2(raw_fraction) / 10)
 
 
 class FrameCompositor:
@@ -298,7 +310,8 @@ class FrameCompositor:
         """Return (scores, diff_images) — one score and one diff image per camera.
 
         Pipeline: resize to 1/4 → grayscale → thresholded absdiff vs previous gray.
-        Score = fraction of pixels with diff > motion_threshold.
+        Score = logarithmically normalized fraction of pixels with diff > motion_threshold
+        (see _log_normalize), so it stays on an intuitive 0.0-1.0 scale.
         """
         scores = []
         diff_images = []
@@ -313,7 +326,7 @@ class FrameCompositor:
             gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
             if cam_idx in self._prev_grays:
                 diff = cv2.absdiff(gray, self._prev_grays[cam_idx])
-                raw = float(np.count_nonzero(diff > self.motion_threshold)) / diff.size
+                raw = _log_normalize(float(np.count_nonzero(diff > self.motion_threshold)) / diff.size)
             else:
                 diff = np.zeros_like(gray)
                 raw = 0.0
@@ -328,11 +341,10 @@ class FrameCompositor:
 
     def _show_motion_debug(self, diff_images, scores):
         """Display a debug window with diff panels and score bars side by side."""
-        max_score = max(scores, default=1.0) or 1.0
         panels = []
         for diff_img, score in zip(diff_images, scores):
             panel = cv2.cvtColor(diff_img, cv2.COLOR_GRAY2BGR)
-            bar = f"{score:.4f} {'*' * int(score / max_score * _DEBUG_BAR_WIDTH):<{_DEBUG_BAR_WIDTH}}"
+            bar = f"{score:.4f} {'*' * min(_DEBUG_BAR_WIDTH, int(score * _DEBUG_BAR_WIDTH)):<{_DEBUG_BAR_WIDTH}}"
             h = panel.shape[0]
             cv2.rectangle(panel, (0, h - 14), (panel.shape[1], h), _COLOR_DARK_GRAY, -1)
             cv2.putText(panel, bar, (2, h - 3),
