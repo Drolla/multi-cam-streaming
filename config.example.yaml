@@ -2,8 +2,18 @@
 
 ######## Logging ########
 
-# Level: DEBUG, INFO, WARNING, ERROR (can be overridden with --log-level)
-log_level: WARNING
+# Level: DEBUG, INFO, WARNING, ERROR.
+# 'default' applies to any module below that doesn't set its own level
+# (can be overridden from the command line with --log-level).
+# The remaining keys are optional per-module overrides, matching
+# multi_cam_streaming/<name>.py; omit a module to fall back to 'default'.
+log_levels:
+  default: INFO
+  # camera_manager: INFO
+  # audio_manager: INFO
+  # audio_mixer: INFO
+  # ffmpeg: INFO
+  # frame_compositor: INFO
 
 ######## Cameras ########
 
@@ -104,11 +114,11 @@ youtube:
 # Built-in mics on USB cameras are auto-detected; use the 'mic' field per camera
 # entry to override or to assign a mic to cameras without auto-detectable audio.
 audio:
-  enabled: false   # set to true to enable live audio mixing
-  # output: "Speakers"  # optional: substring of output device name for local playback;
-  #                     # can also be set via --audio-output on the command line (CLI takes priority)
-  weight_threshold: 0    # raw motion score below which a camera's mic is muted (0 = never mute)
-  weight_smoothing: 0.3  # seconds; higher = smoother/slower volume ramps (0 = instant changes)
+  enabled: false           # set to true to enable live audio mixing
+  # output: "Speakers"     # optional: substring of output device name for local playback;
+  #                        # can also be set via --audio-output on the command line (CLI takes priority)
+  weight_threshold: 0.01   # raw motion score below which a camera's mic is muted (0 = never mute)
+  weight_smoothing: 0.3    # seconds; higher = smoother/slower volume ramps (0 = instant changes)
   # compression:           # optional soft-knee compressor on the final mixed signal
   #   threshold_db: -18    # mixed-signal peaks above this get gain-reduced
   #   ratio_db: 3.0        # dB-in : 1dB-out, e.g. 3.0 means every 3dB over threshold becomes 1dB in output

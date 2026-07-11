@@ -153,10 +153,7 @@ class FrameCompositor:
                     self._old_geom = self._geometry_by_camera(old_layout, self._slot_assignment)
 
                     if log.isEnabledFor(logging.DEBUG):
-                        self._log_transition(
-                            old_layout, self._slot_assignment, self._accepted_scores or {},
-                            new_idx, new_assignment, score_by_idx,
-                        )
+                        self._log_transition(new_idx, new_assignment, score_by_idx)
 
                     self._active_layout_idx = new_idx
                     self._slot_assignment = new_assignment
@@ -183,29 +180,17 @@ class FrameCompositor:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _log_transition(self, old_layout, old_assignment, old_scores,
-                        new_idx, new_assignment, new_scores):
-        def _fmt(scores, assignment, layout_frames):
-            lines = []
-            for slot_idx, cam_idx in enumerate(assignment):
-                score = scores.get(cam_idx, 0.0)
-                slot = layout_frames[slot_idx] if slot_idx < len(layout_frames) else {}
-                size = slot.get('size', 0)
-                lines.append(
-                    f"  slot {slot_idx}: cam {cam_idx}"
-                    f"  score={score:.4f}"
-                    f"  size={size:.2f}"
-                )
-            return '\n'.join(lines) or '  (none)'
-
-        old_name = self._layouts[self._active_layout_idx]['name']
+    def _log_transition(self, new_idx, new_assignment, new_scores):
         new_name = self._layouts[new_idx]['name']
+        new_layout = self._layouts[new_idx]['frames']
+        cams = [f"{cam_idx:>1}" for cam_idx in new_assignment]
+        sizes = [f"{(new_layout[slot_idx].get('size', 0) if slot_idx < len(new_layout) else 0):.2f}"
+                for slot_idx in range(len(new_assignment))]
+        # stars = [f"{'*' * min(10, round(new_scores.get(cam_idx, 0.0) * 10)):<10}" for cam_idx in new_assignment]
+        raw_scores = [f"{new_scores.get(cam_idx, 0.0):.4f}" for cam_idx in new_assignment]
         log.debug(
-            "Layout/assignment change triggered\n"
-            "  OLD layout: %s\n%s\n"
-            "  NEW layout: %s\n%s",
-            old_name, _fmt(old_scores, old_assignment, old_layout),
-            new_name, _fmt(new_scores, new_assignment, self._layouts[new_idx]['frames']),
+            "Layout change triggered: layout=%-28s cams=%s slots=%s raw_scores=%s",
+            new_name, '|'.join(cams), '|'.join(sizes), '|'.join(raw_scores),
         )
 
     def _scores_changed_substantially(self, score_by_idx):

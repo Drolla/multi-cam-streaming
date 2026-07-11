@@ -55,6 +55,7 @@ _DEFAULT_MOTION_THRESHOLD = 15
 _DEFAULT_MOTION_CHANGE_THRESHOLD = 0.05
 _DEFAULT_MIN_SWITCH_INTERVAL = 5.0
 _DEFAULT_TRANSITION_DURATION = 0.5
+_LOGGABLE_MODULES = ("camera_manager", "audio_manager", "audio_mixer", "ffmpeg", "frame_compositor")
 
 
 def _parse_camera_entry(entry):
@@ -321,8 +322,20 @@ def main():
         type=str,
         default=None,
         metavar="LEVEL",
-        help="Logging level (DEBUG, INFO, WARNING, ERROR). Overrides config file setting."
+        help="Default logging level (DEBUG, INFO, WARNING, ERROR). Overrides log_levels.default in "
+             "the config file."
     )
+    for module_name in _LOGGABLE_MODULES:
+        flag = f"--log-level-{module_name.replace('_', '-')}"
+        parser.add_argument(
+            flag,
+            type=str,
+            default=None,
+            metavar="LEVEL",
+            dest=f"log_level_{module_name}",
+            help=f"Logging level (DEBUG, INFO, WARNING, ERROR) for the '{module_name}' module. "
+                 f"Overrides log_levels.{module_name} in the config file."
+        )
     parser.add_argument(
         "--show-motion-debug",
         action="store_true",
@@ -367,13 +380,25 @@ def main():
 
     # Resolve log level: CLI > config file > default WARNING
     config = load_config(args.config)
-    raw_level = args.log_level or config.get('log_level', 'WARNING')
+    log_levels = config.get('log_levels', {})
+    raw_level = args.log_level or log_levels.get('default', 'WARNING')
     numeric_level = getattr(logging, raw_level.upper(), None)
     if not isinstance(numeric_level, int):
         parser.error(f"Invalid log level '{raw_level}'. Choose from DEBUG, INFO, WARNING, ERROR.")
     logging.basicConfig(level=numeric_level,
                         format="%(asctime)s %(levelname)s %(message)s",
                         datefmt="%H:%M:%S")
+
+    # Per-module log level overrides: CLI > config file
+    for module_name in _LOGGABLE_MODULES:
+        raw_module_level = getattr(args, f"log_level_{module_name}") or log_levels.get(module_name)
+        if raw_module_level is None:
+            continue
+        module_level = getattr(logging, str(raw_module_level).upper(), None)
+        if not isinstance(module_level, int):
+            parser.error(f"Invalid log level '{raw_module_level}' for module '{module_name}'. "
+                         f"Choose from DEBUG, INFO, WARNING, ERROR.")
+        logging.getLogger(f"multi_cam_streaming.{module_name}").setLevel(module_level)
 
     run_camera_viewer(args.config, mode=args.mode, show_motion_debug=args.show_motion_debug,
                       audio_output=args.audio_output)

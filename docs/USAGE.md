@@ -78,7 +78,9 @@ python3 scripts/camera_viewer.py --show-motion-debug
 ```
 
 ### Set Log Level
-Override the log level from the command line (also configurable via `log_level:` in the config file).
+Override the default log level from the command line (also configurable via `log_levels.default:` in the
+config file). Individual modules can be set to their own level via `log_levels.<module>:` in the config
+file; there is no CLI flag for per-module overrides.
 ```bash
 python3 scripts/camera_viewer.py --log-level DEBUG
 ```
@@ -107,7 +109,9 @@ stream-to-youtube --log-level DEBUG
 See `config.example.yaml` for a fully annotated reference. Key sections:
 
 ```yaml
-log_level: WARNING  # optional: DEBUG, INFO, WARNING, or ERROR (default WARNING)
+log_levels:               # optional: DEBUG, INFO, WARNING, or ERROR (default WARNING)
+  default: WARNING        # fallback for any module not listed below
+  # audio_mixer: DEBUG    # optional per-module override, e.g. multi_cam_streaming/audio_mixer.py
 
 # Each entry is a plain pattern string or a dict with optional per-camera attributes.
 cameras:
