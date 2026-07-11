@@ -78,7 +78,9 @@ python3 scripts/camera_viewer.py --show-motion-debug
 ```
 
 ### Set Log Level
-Override the log level from the command line (also configurable via `log_level:` in the config file).
+Override the default log level from the command line (also configurable via `log_levels.default:` in the
+config file). Individual modules can be set to their own level via `log_levels.<module>:` in the config
+file; there is no CLI flag for per-module overrides.
 ```bash
 python3 scripts/camera_viewer.py --log-level DEBUG
 ```
@@ -107,7 +109,9 @@ stream-to-youtube --log-level DEBUG
 See `config.example.yaml` for a fully annotated reference. Key sections:
 
 ```yaml
-log_level: WARNING  # optional: DEBUG, INFO, WARNING, or ERROR (default WARNING)
+log_levels:               # optional: DEBUG, INFO, WARNING, or ERROR (default WARNING)
+  default: WARNING        # fallback for any module not listed below
+  # audio_mixer: DEBUG    # optional per-module override, e.g. multi_cam_streaming/audio_mixer.py
 
 # Each entry is a plain pattern string or a dict with optional per-camera attributes.
 cameras:
@@ -125,18 +129,10 @@ motion:
   change_threshold: 0.05   # min score delta to consider a layout switch
   min_switch_interval: 5.0 # minimum seconds between accepted switches
 
-output:
+video:
   width: 1280
   height: 720
   fps: 30
-
-youtube:
-  stream_key: "${YOUTUBE_STREAM_KEY}"
-  rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
-
-audio:
-  enabled: false  # set to true to mix microphone audio weighted by motion score
-  # output: "Speakers"  # optional: play mixed audio to this local output device (substring match)
 
 transition_duration: 0.5   # seconds to animate between layouts
 
@@ -147,6 +143,14 @@ layouts:
       - {pos: [0.5, 0.0], size: 0.5}  # slot 1 — top-right
       - {pos: [0.0, 0.5], size: 0.5}  # slot 2 — bottom-left
       - {pos: [0.5, 0.5], size: 0.5}  # slot 3 — bottom-right
+
+youtube:
+  stream_key: "${YOUTUBE_STREAM_KEY}"
+  rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
+
+audio:
+  enabled: false  # set to true to mix microphone audio weighted by motion score
+  # output: "Speakers"  # optional: play mixed audio to this local output device (substring match)
 ```
 
 Cameras are assigned to layout slots dynamically by **motion priority**: the camera
@@ -265,7 +269,7 @@ sudo journalctl -u multi-cam-stream -f
 Modify your config file to change resolution or frame rate:
 
 ```yaml
-output:
+video:
   width: 1920
   height: 1080
   fps: 60

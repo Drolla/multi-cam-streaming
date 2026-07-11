@@ -1,5 +1,22 @@
 # Camera and streaming configuration
 
+######## Logging ########
+
+# Level: DEBUG, INFO, WARNING, ERROR.
+# 'default' applies to any module below that doesn't set its own level
+# (can be overridden from the command line with --log-level).
+# The remaining keys are optional per-module overrides, matching
+# multi_cam_streaming/<name>.py; omit a module to fall back to 'default'.
+log_levels:
+  default: INFO
+  # camera_manager: INFO
+  # audio_manager: INFO
+  # audio_mixer: INFO
+  # ffmpeg: INFO
+  # frame_compositor: INFO
+
+######## Cameras ########
+
 # List of camera devices. Each entry is either a plain regex pattern string, or a dict
 # with a 'pattern' key plus optional per-camera attributes:
 #   min_slot (int, default 0)    — never placed in a slot with a lower index (0 = largest slot)
@@ -10,9 +27,9 @@
 #   volume_db (float, default 0.0) — gain applied to this camera's mic audio, in decibels;
 #                                  independent of activity_multiplier. Positive boosts, negative
 #                                  attenuates (e.g. 6 ≈ double perceived loudness, -6 ≈ half).
-# Use: python scripts/camera_viewer.py --print-device-config  to generate a cameras: block
-# with the suggested camera-to-mic match filled in (Linux only; assign 'mic' manually elsewhere).
-# The same camera and mic can appear more than once; it is opened and read only once.
+# Tip: python scripts/camera_viewer.py --print-device-config generates a cameras: block with the
+# suggested camera-to-mic match filled in (Linux only; assign 'mic' manually elsewhere). The same
+# camera and mic can appear more than once; it is opened and read only once.
 cameras:
   - "usb.*0-1"
   - pattern: "usb.*1-1"
@@ -24,8 +41,7 @@ cameras:
     mic: "ReSpeaker"           # explicit audio device name pattern (substring match)
     volume_db: 6               # this mic is quiet — boost it by 6dB
 
-# Logging level: DEBUG, INFO, WARNING, ERROR (can be overridden with --log-level)
-log_level: WARNING
+######## Motion Detection ########
 
 motion:
   check_interval: 1.0      # seconds between motion score computations
@@ -33,22 +49,13 @@ motion:
   change_threshold: 0.05   # min score delta (0.0–1.0) on any camera to consider a switch
   min_switch_interval: 5.0 # minimum seconds between accepted layout/assignment changes
 
+######## Display / Video ########
+
 # Output stream / display settings
-output:
+video:
   width: 1280
   height: 720
   fps: 30
-
-# YouTube stream configuration
-# IMPORTANT: Use environment variable for stream_key instead of hardcoding:
-# export YOUTUBE_STREAM_KEY="your-actual-key"
-youtube:
-  stream_key: "${YOUTUBE_STREAM_KEY}"
-  rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
-
-# Duration in seconds for the alpha-blend transition when the layout or camera
-# assignment changes (set to 0 to disable transitions).
-transition_duration: 0.5
 
 # Layout definitions: the active layout is selected automatically each scoring
 # interval based on how dominant the top-scoring camera is relative to the others.
@@ -88,19 +95,30 @@ layouts:
       - {pos: [0.75, 0.25], size: 0.25}  # slot 2 — right-mid overlay
       - {pos: [0.00, 0.75], size: 0.25}  # slot 3 — bottom-left overlay
 
+# Duration in seconds for the alpha-blend transition when the layout or camera
+# assignment changes (set to 0 to disable transitions).
+transition_duration: 0.5
 
-# Audio settings
+######## Streaming (YouTube) ########
+
+# IMPORTANT: Use environment variable for stream_key instead of hardcoding:
+# export YOUTUBE_STREAM_KEY="your-actual-key"
+youtube:
+  stream_key: "${YOUTUBE_STREAM_KEY}"
+  rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
+
+######## Audio ########
 
 # Audio mixing: blend microphone audio from each camera weighted by motion score.
 # Requires sounddevice (all platforms) and pyudev (Linux) to be installed.
 # Built-in mics on USB cameras are auto-detected; use the 'mic' field per camera
 # entry to override or to assign a mic to cameras without auto-detectable audio.
 audio:
-  enabled: false   # set to true to enable live audio mixing
-  # output: "Speakers"  # optional: substring of output device name for local playback;
-  #                     # can also be set via --audio-output on the command line (CLI takes priority)
-  weight_threshold: 0    # raw motion score below which a camera's mic is muted (0 = never mute)
-  weight_smoothing: 0.3  # seconds; higher = smoother/slower volume ramps (0 = instant changes)
+  enabled: false           # set to true to enable live audio mixing
+  # output: "Speakers"     # optional: substring of output device name for local playback;
+  #                        # can also be set via --audio-output on the command line (CLI takes priority)
+  weight_threshold: 0.01   # raw motion score below which a camera's mic is muted (0 = never mute)
+  weight_smoothing: 0.3    # seconds; higher = smoother/slower volume ramps (0 = instant changes)
   # compression:           # optional soft-knee compressor on the final mixed signal
   #   threshold_db: -18    # mixed-signal peaks above this get gain-reduced
   #   ratio_db: 3.0        # dB-in : 1dB-out, e.g. 3.0 means every 3dB over threshold becomes 1dB in output
