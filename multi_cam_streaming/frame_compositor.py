@@ -9,15 +9,23 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 
-_MOTION_THRESHOLD = 15       # pixel diff below this is treated as sensor noise
+# Defaults for FrameCompositor.__init__ parameters — each is overridable via the YAML
+# config's motion: section (or transition_duration at the config top level). See
+# scripts/camera_viewer.py, which reads these from config and passes them as constructor
+# arguments; the values below are the fallback when a key is absent from the config file.
+_DEFAULT_MOTION_LOG_INTERVAL = 1.0    # motion.check_interval
+_DEFAULT_MOTION_THRESHOLD = 15        # motion.threshold
+_DEFAULT_CHANGE_THRESHOLD = 0.05      # motion.change_threshold
+_DEFAULT_NORMALIZATION = 0.7          # motion.normalization
+_DEFAULT_MIN_SWITCH_INTERVAL = 5.0    # motion.min_switch_interval
+_DEFAULT_TRANSITION_DURATION = 0.5    # transition_duration
+
+# Internal tuning constants — not exposed via YAML config, edit here to retune.
 _DEBUG_BAR_WIDTH = 10        # character width of the score bar in the debug window
 _MIN_MOTION_FRAME_SIZE = 16  # minimum camera frame width/height after 1/4 resize to be useful for motion scoring
-_CHANGE_THRESHOLD = 0.05     # min absolute score delta required to accept a layout/assignment change
-_MIN_SWITCH_INTERVAL = 5.0   # minimum seconds between accepted layout/assignment changes
-_TRANSITION_DURATION = 0.5   # seconds to animate slot geometry and alpha-blend on layout change
 _SCORE_GAMMA = 0.8           # power-curve exponent for _normalize_score; 1.0 = linear, lower = more log-like
-_DAMPING_EXP_MAX = 2.5       # damping exponent used when scene_intensity -> 0 (near-idle scenes)
-_DAMPING_KNEE = 0.12         # scene_intensity at/above which damping eases to ~1.0 (no extra suppression)
+_NORMALIZATION_KNEE = 0.15        # corrected top fraction at/above which normalization reaches full strength
+_NORMALIZATION_KNEE_POWER = 3     # steepness of the ramp from 0 to full strength below the knee
 
 _COLOR_DARK_GRAY = (40, 40, 40)    # background fill for text overlays
 _COLOR_MID_GRAY  = (80, 80, 80)    # background fill for timestamp bar
@@ -39,34 +47,34 @@ def _normalize_score(raw_fraction):
     return raw_fraction ** _SCORE_GAMMA
 
 
-def _distribute_scene_activity(abs_activities):
-    """Combine per-camera absolute activity into final scores via inter-camera normalization.
+def _normalize_scene(corrected_fractions, normalization):
+    """Blend per-camera corrected fractions toward a shared 0.0-1.0 ceiling.
 
-    abs_activities: list of per-camera scores from _normalize_score (0.0-1.0 each).
+    corrected_fractions: list of per-camera raw_fraction * activity_multiplier values.
+    normalization: 0.0-1.0 dial. 0 = no-op (values pass through unchanged, including the
+                   top camera). 1 = full normalization: the busiest camera's value is
+                   pushed to exactly 1.0 and every other camera scaled by its share of it.
 
-    Two-level normalization:
-    - scene_intensity = max(abs_activities): how much is genuinely happening anywhere.
-    - damped_ceiling = scene_intensity ** exponent, where exponent eases from
-      _DAMPING_EXP_MAX (at scene_intensity == 0) down to 1.0 (at scene_intensity >=
-      _DAMPING_KNEE). Near-idle scenes get strongly suppressed; scenes with at least one
-      camera showing real activity (>= the knee) pass through with little to no extra
-      damping, so genuine moderate activity isn't crushed toward 0.
-    - share_i = abs_activities[i] / scene_intensity: camera's standing relative to the
-      busiest camera (1.0 for the busiest), using already-log/power-curved values so the
-      comparison is perceptual rather than raw-linear.
-    - final_i = share_i * damped_ceiling.
+    top = max(corrected_fractions). The normalization strength actually applied
+    (effective_normalization) ramps from 0 up to `normalization` as top rises past
+    _NORMALIZATION_KNEE, using a steep power-law ramp (_NORMALIZATION_KNEE_POWER) so
+    near-idle scenes (top well below the knee) stay a near no-op — this is what stops a
+    uniformly quiet scene from being pulled toward the 1.0 ceiling just because
+    normalization is turned up. ceiling = lerp(top, 1.0, effective_normalization); each
+    camera keeps its share of top (corrected_fractions[i] / top) scaled onto that ceiling.
 
-    Returns a list of final scores, same order and length as abs_activities, each 0.0-1.0.
+    Returns a list of normalized fractions, same order/length as corrected_fractions,
+    each 0.0-1.0.
     """
-    if not abs_activities:
+    if not corrected_fractions:
         return []
-    scene_intensity = max(abs_activities)
-    if scene_intensity <= 0.0:
-        return [0.0] * len(abs_activities)
-    knee_progress = min(1.0, scene_intensity / _DAMPING_KNEE)
-    exponent = _DAMPING_EXP_MAX - knee_progress * (_DAMPING_EXP_MAX - 1.0)
-    damped_ceiling = scene_intensity ** exponent
-    return [(a / scene_intensity) * damped_ceiling for a in abs_activities]
+    top = max(corrected_fractions)
+    if top <= 0.0:
+        return [0.0] * len(corrected_fractions)
+    knee_progress = min(1.0, top / _NORMALIZATION_KNEE) ** _NORMALIZATION_KNEE_POWER
+    effective_normalization = normalization * knee_progress
+    ceiling = _lerp(top, 1.0, effective_normalization)
+    return [(c / top) * ceiling for c in corrected_fractions]
 
 
 class FrameCompositor:
@@ -90,10 +98,12 @@ class FrameCompositor:
 
     def __init__(self, layouts, output_dims,
                  cam_attrs=None,
-                 motion_log_interval=1.0, motion_threshold=_MOTION_THRESHOLD,
-                 motion_change_threshold=_CHANGE_THRESHOLD,
-                 min_switch_interval=_MIN_SWITCH_INTERVAL,
-                 transition_duration=_TRANSITION_DURATION, show_motion_debug=False):
+                 motion_log_interval=_DEFAULT_MOTION_LOG_INTERVAL,
+                 motion_threshold=_DEFAULT_MOTION_THRESHOLD,
+                 motion_change_threshold=_DEFAULT_CHANGE_THRESHOLD,
+                 motion_normalization=_DEFAULT_NORMALIZATION,
+                 min_switch_interval=_DEFAULT_MIN_SWITCH_INTERVAL,
+                 transition_duration=_DEFAULT_TRANSITION_DURATION, show_motion_debug=False):
         """
         Args:
             layouts: List of layout dicts, each with 'name' and 'frames' (list of slot dicts).
@@ -107,13 +117,20 @@ class FrameCompositor:
                          max_slot (int|inf, default inf): camera is never placed in a slot
                              with a higher index.
                          activity_multiplier (float, default 1.0): multiplied with the raw
-                             motion score before ranking. Values >1 increase perceived activity,
-                             <1 reduce it. 1.0 = no change.
+                             pixel-change fraction before inter-camera normalization. Values >1
+                             increase perceived activity, <1 reduce it; also shifts the scene's
+                             normalization reference toward/away from this camera. 1.0 = no change.
             motion_log_interval: Seconds between motion score computations.
             motion_threshold: Pixel diff value below which changes are ignored (noise gate).
             motion_change_threshold: Minimum absolute score change (0.0–1.0) required on at
                                      least one camera before a layout or assignment switch is
                                      accepted. Prevents flickering from minor score fluctuations.
+            motion_normalization: 0.0–1.0 inter-camera normalization strength. 0 = no
+                                  normalization (each camera's score reflects only its own
+                                  activity). 1 = full normalization (the busiest camera's score
+                                  is pushed toward 1.0, others scaled by their share of it) —
+                                  but only once scene activity clears the noise floor, so
+                                  near-idle scenes are not pulled toward the ceiling.
             min_switch_interval: Minimum seconds that must elapse between two accepted
                                  layout or assignment changes. Score-based hysteresis may
                                  qualify a change, but it is suppressed until this interval
@@ -130,6 +147,7 @@ class FrameCompositor:
         self.motion_log_interval = motion_log_interval
         self.motion_threshold = motion_threshold
         self.motion_change_threshold = motion_change_threshold
+        self.motion_normalization = motion_normalization
         self.min_switch_interval = min_switch_interval
         self.transition_duration = transition_duration
         self.show_motion_debug = show_motion_debug
@@ -360,41 +378,39 @@ class FrameCompositor:
         """Return (scores, diff_images) — one score and one diff image per camera.
 
         Pipeline: resize to 1/4 → grayscale → thresholded absdiff vs previous gray →
-        per-camera absolute activity (_normalize_score) → inter-camera normalization
-        (_distribute_scene_activity), which caps scores by overall scene intensity so a
-        uniformly quiet scene can't read as high activity → per-camera activity_multiplier
-        applied last, so it corrects a single camera's output without distorting the
-        scene-wide comparison.
+        raw_fraction → per-camera activity_multiplier applied (so a boosted camera also
+        shifts the scene's normalization reference, not just its own final score) →
+        inter-camera normalization (_normalize_scene), which caps scores by overall scene
+        activity so a uniformly quiet scene can't read as high activity → absolute
+        perceptual curve (_normalize_score) applied last.
         """
-        abs_activities = []
+        corrected_fractions = []
         diff_images = []
         updated_grays = {}
 
         for cam_idx, frame in enumerate(frames):
             small = cv2.resize(frame, (frame.shape[1] // 4, frame.shape[0] // 4))
+            multiplier = self._cam_attrs[cam_idx]['activity_multiplier'] \
+                if cam_idx < len(self._cam_attrs) else 1.0
             if small.shape[0] < _MIN_MOTION_FRAME_SIZE or small.shape[1] < _MIN_MOTION_FRAME_SIZE:
-                abs_activities.append(0.0)
+                corrected_fractions.append(0.0)
                 diff_images.append(np.zeros((_MIN_MOTION_FRAME_SIZE, _MIN_MOTION_FRAME_SIZE), dtype=np.uint8))
                 continue
             gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
             if cam_idx in self._prev_grays:
                 diff = cv2.absdiff(gray, self._prev_grays[cam_idx])
-                abs_activity = _normalize_score(float(np.count_nonzero(diff > self.motion_threshold)) / diff.size)
+                raw_fraction = float(np.count_nonzero(diff > self.motion_threshold)) / diff.size
             else:
                 diff = np.zeros_like(gray)
-                abs_activity = 0.0
-            abs_activities.append(abs_activity)
+                raw_fraction = 0.0
+            corrected_fractions.append(raw_fraction * multiplier)
             diff_images.append(diff)
             updated_grays[cam_idx] = gray
 
         self._prev_grays.update(updated_grays)
 
-        distributed = _distribute_scene_activity(abs_activities)
-        scores = []
-        for cam_idx, score in enumerate(distributed):
-            multiplier = self._cam_attrs[cam_idx]['activity_multiplier'] \
-                if cam_idx < len(self._cam_attrs) else 1.0
-            scores.append(score * multiplier)
+        normalized = _normalize_scene(corrected_fractions, self.motion_normalization)
+        scores = [_normalize_score(n) for n in normalized]
 
         return scores, diff_images
 

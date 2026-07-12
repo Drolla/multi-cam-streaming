@@ -53,6 +53,7 @@ _DEFAULT_FPS = 30
 _DEFAULT_MOTION_CHECK_INTERVAL = 1.0
 _DEFAULT_MOTION_THRESHOLD = 15
 _DEFAULT_MOTION_CHANGE_THRESHOLD = 0.05
+_DEFAULT_MOTION_NORMALIZATION = 0.7
 _DEFAULT_MIN_SWITCH_INTERVAL = 5.0
 _DEFAULT_TRANSITION_DURATION = 0.5
 _LOGGABLE_MODULES = ("camera_manager", "audio_manager", "audio_mixer", "ffmpeg", "frame_compositor")
@@ -247,6 +248,7 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
                     motion_log_interval=float(motion_cfg.get('check_interval', _DEFAULT_MOTION_CHECK_INTERVAL)),
                     motion_threshold=int(motion_cfg.get('threshold', _DEFAULT_MOTION_THRESHOLD)),
                     motion_change_threshold=float(motion_cfg.get('change_threshold', _DEFAULT_MOTION_CHANGE_THRESHOLD)),
+                    motion_normalization=float(motion_cfg.get('normalization', _DEFAULT_MOTION_NORMALIZATION)),
                     min_switch_interval=float(motion_cfg.get('min_switch_interval', _DEFAULT_MIN_SWITCH_INTERVAL)),
                     transition_duration=float(config.get('transition_duration', _DEFAULT_TRANSITION_DURATION)),
                     show_motion_debug=show_motion_debug)
