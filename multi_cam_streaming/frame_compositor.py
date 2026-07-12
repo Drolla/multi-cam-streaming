@@ -253,24 +253,23 @@ class FrameCompositor:
 
         if log.isEnabledFor(logging.DEBUG):
             log.debug(
-                "Layout change triggered: layout=%-28s cams=%s slots=%s",
+                "Layout change: layout=%-28s cams=%s slots=%s",
                 new_name, '|'.join(cams), '|'.join(sizes),
             )
             return
 
         stars = [f"{'*' * min(10, round(new_scores.get(cam_idx, 0.0) * 10)):<10}" for cam_idx in new_assignment]
         log.info(
-            "Layout change triggered: layout=%-28s cams=%s slots=%s raw_scores=%s",
+            "Layout change: layout=%-28s cams=%s slots=%s raw_scores=%s",
             new_name, '|'.join(cams), '|'.join(sizes), '|'.join(stars),
         )
 
     def _log_scores(self, scores):
-        cams = [f"{i:>1}" for i in range(len(scores))]
         stars = [f"{'*' * min(10, round(s * 10)):<10}" for s in scores]
         raw_scores = [f"{s:.4f}" for s in scores]
         log.debug(
-            "Motion scores computed: cams=%s scores=%s raw_scores=%s",
-            '|'.join(cams), '|'.join(stars), '|'.join(raw_scores),
+            "Motion scores: scores=%s raw_scores=%s",
+            '|'.join(stars), '|'.join(raw_scores),
         )
 
     def _scores_changed_substantially(self, score_by_idx):
