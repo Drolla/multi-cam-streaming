@@ -1,6 +1,5 @@
 """Motion-based frame compositor that selects layouts and assigns cameras to slots."""
 import logging
-import math
 import time
 from datetime import datetime
 
@@ -16,6 +15,9 @@ _MIN_MOTION_FRAME_SIZE = 16  # minimum camera frame width/height after 1/4 resiz
 _CHANGE_THRESHOLD = 0.05     # min absolute score delta required to accept a layout/assignment change
 _MIN_SWITCH_INTERVAL = 5.0   # minimum seconds between accepted layout/assignment changes
 _TRANSITION_DURATION = 0.5   # seconds to animate slot geometry and alpha-blend on layout change
+_SCORE_GAMMA = 0.8           # power-curve exponent for _normalize_score; 1.0 = linear, lower = more log-like
+_DAMPING_EXP_MAX = 2.5       # damping exponent used when scene_intensity -> 0 (near-idle scenes)
+_DAMPING_KNEE = 0.12         # scene_intensity at/above which damping eases to ~1.0 (no extra suppression)
 
 _COLOR_DARK_GRAY = (40, 40, 40)    # background fill for text overlays
 _COLOR_MID_GRAY  = (80, 80, 80)    # background fill for timestamp bar
@@ -26,15 +28,45 @@ def _lerp(a, b, t):
     return a + (b - a) * t
 
 
-def _log_normalize(raw_fraction):
-    """Map a linear pixel-change fraction (0.0-1.0) to a logarithmic 0.0-1.0 score.
+def _normalize_score(raw_fraction):
+    """Map a linear pixel-change fraction (0.0-1.0) to a 0.0-1.0 score via a power curve.
 
-    Anchored so each halving of the raw fraction drops the score by 0.1: 100% -> 1.0,
-    50% -> 0.9, 25% -> 0.8, ~12% -> 0.7, ~6% -> 0.6, floored at 0.0 near the noise floor.
+    score = raw_fraction ** _SCORE_GAMMA. _SCORE_GAMMA=1.0 is linear (no boost); smaller
+    values boost small fractions more, approaching a logarithmic curve as gamma -> 0.
     """
     if raw_fraction <= 0.0:
         return 0.0
-    return max(0.0, 1 + math.log2(raw_fraction) / 10)
+    return raw_fraction ** _SCORE_GAMMA
+
+
+def _distribute_scene_activity(abs_activities):
+    """Combine per-camera absolute activity into final scores via inter-camera normalization.
+
+    abs_activities: list of per-camera scores from _normalize_score (0.0-1.0 each).
+
+    Two-level normalization:
+    - scene_intensity = max(abs_activities): how much is genuinely happening anywhere.
+    - damped_ceiling = scene_intensity ** exponent, where exponent eases from
+      _DAMPING_EXP_MAX (at scene_intensity == 0) down to 1.0 (at scene_intensity >=
+      _DAMPING_KNEE). Near-idle scenes get strongly suppressed; scenes with at least one
+      camera showing real activity (>= the knee) pass through with little to no extra
+      damping, so genuine moderate activity isn't crushed toward 0.
+    - share_i = abs_activities[i] / scene_intensity: camera's standing relative to the
+      busiest camera (1.0 for the busiest), using already-log/power-curved values so the
+      comparison is perceptual rather than raw-linear.
+    - final_i = share_i * damped_ceiling.
+
+    Returns a list of final scores, same order and length as abs_activities, each 0.0-1.0.
+    """
+    if not abs_activities:
+        return []
+    scene_intensity = max(abs_activities)
+    if scene_intensity <= 0.0:
+        return [0.0] * len(abs_activities)
+    knee_progress = min(1.0, scene_intensity / _DAMPING_KNEE)
+    exponent = _DAMPING_EXP_MAX - knee_progress * (_DAMPING_EXP_MAX - 1.0)
+    damped_ceiling = scene_intensity ** exponent
+    return [(a / scene_intensity) * damped_ceiling for a in abs_activities]
 
 
 class FrameCompositor:
@@ -146,6 +178,8 @@ class FrameCompositor:
             self._motion_scores, diff_images = self._compute_motion_scores(frames)
             if self.show_motion_debug:
                 self._show_motion_debug(diff_images, self._motion_scores)
+            if log.isEnabledFor(logging.DEBUG):
+                self._log_scores(self._motion_scores)
             self._last_score_time = now
 
             # Only consider a layout/assignment change if scores moved substantially
@@ -164,7 +198,7 @@ class FrameCompositor:
                         self._slot_assignment, t=1.0)
                     self._old_geom = self._geometry_by_camera(old_layout, self._slot_assignment)
 
-                    if log.isEnabledFor(logging.DEBUG):
+                    if log.isEnabledFor(logging.INFO):
                         self._log_transition(new_idx, new_assignment, score_by_idx)
 
                     self._active_layout_idx = new_idx
@@ -198,11 +232,27 @@ class FrameCompositor:
         cams = [f"{cam_idx:>1}" for cam_idx in new_assignment]
         sizes = [f"{(new_layout[slot_idx].get('size', 0) if slot_idx < len(new_layout) else 0):.2f}"
                 for slot_idx in range(len(new_assignment))]
-        # stars = [f"{'*' * min(10, round(new_scores.get(cam_idx, 0.0) * 10)):<10}" for cam_idx in new_assignment]
-        raw_scores = [f"{new_scores.get(cam_idx, 0.0):.4f}" for cam_idx in new_assignment]
-        log.debug(
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug(
+                "Layout change triggered: layout=%-28s cams=%s slots=%s",
+                new_name, '|'.join(cams), '|'.join(sizes),
+            )
+            return
+
+        stars = [f"{'*' * min(10, round(new_scores.get(cam_idx, 0.0) * 10)):<10}" for cam_idx in new_assignment]
+        log.info(
             "Layout change triggered: layout=%-28s cams=%s slots=%s raw_scores=%s",
-            new_name, '|'.join(cams), '|'.join(sizes), '|'.join(raw_scores),
+            new_name, '|'.join(cams), '|'.join(sizes), '|'.join(stars),
+        )
+
+    def _log_scores(self, scores):
+        cams = [f"{i:>1}" for i in range(len(scores))]
+        stars = [f"{'*' * min(10, round(s * 10)):<10}" for s in scores]
+        raw_scores = [f"{s:.4f}" for s in scores]
+        log.debug(
+            "Motion scores computed: cams=%s scores=%s raw_scores=%s",
+            '|'.join(cams), '|'.join(stars), '|'.join(raw_scores),
         )
 
     def _scores_changed_substantially(self, score_by_idx):
@@ -309,34 +359,43 @@ class FrameCompositor:
     def _compute_motion_scores(self, frames):
         """Return (scores, diff_images) — one score and one diff image per camera.
 
-        Pipeline: resize to 1/4 → grayscale → thresholded absdiff vs previous gray.
-        Score = logarithmically normalized fraction of pixels with diff > motion_threshold
-        (see _log_normalize), so it stays on an intuitive 0.0-1.0 scale.
+        Pipeline: resize to 1/4 → grayscale → thresholded absdiff vs previous gray →
+        per-camera absolute activity (_normalize_score) → inter-camera normalization
+        (_distribute_scene_activity), which caps scores by overall scene intensity so a
+        uniformly quiet scene can't read as high activity → per-camera activity_multiplier
+        applied last, so it corrects a single camera's output without distorting the
+        scene-wide comparison.
         """
-        scores = []
+        abs_activities = []
         diff_images = []
         updated_grays = {}
 
         for cam_idx, frame in enumerate(frames):
             small = cv2.resize(frame, (frame.shape[1] // 4, frame.shape[0] // 4))
             if small.shape[0] < _MIN_MOTION_FRAME_SIZE or small.shape[1] < _MIN_MOTION_FRAME_SIZE:
-                scores.append(0.0)
+                abs_activities.append(0.0)
                 diff_images.append(np.zeros((_MIN_MOTION_FRAME_SIZE, _MIN_MOTION_FRAME_SIZE), dtype=np.uint8))
                 continue
             gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
             if cam_idx in self._prev_grays:
                 diff = cv2.absdiff(gray, self._prev_grays[cam_idx])
-                raw = _log_normalize(float(np.count_nonzero(diff > self.motion_threshold)) / diff.size)
+                abs_activity = _normalize_score(float(np.count_nonzero(diff > self.motion_threshold)) / diff.size)
             else:
                 diff = np.zeros_like(gray)
-                raw = 0.0
-            multiplier = self._cam_attrs[cam_idx]['activity_multiplier'] \
-                if cam_idx < len(self._cam_attrs) else 1.0
-            scores.append(raw * multiplier)
+                abs_activity = 0.0
+            abs_activities.append(abs_activity)
             diff_images.append(diff)
             updated_grays[cam_idx] = gray
 
         self._prev_grays.update(updated_grays)
+
+        distributed = _distribute_scene_activity(abs_activities)
+        scores = []
+        for cam_idx, score in enumerate(distributed):
+            multiplier = self._cam_attrs[cam_idx]['activity_multiplier'] \
+                if cam_idx < len(self._cam_attrs) else 1.0
+            scores.append(score * multiplier)
+
         return scores, diff_images
 
     def _show_motion_debug(self, diff_images, scores):
