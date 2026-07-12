@@ -21,7 +21,10 @@ log_levels:
 # with a 'pattern' key plus optional per-camera attributes:
 #   min_slot (int, default 0)    — never placed in a slot with a lower index (0 = largest slot)
 #   max_slot (int, default inf)  — never placed in a slot with a higher index
-#   activity_multiplier (float, default 1.0) — multiplied with raw score; >1 boosts, <1 suppresses
+#   activity_multiplier (float, default 1.0) — multiplied with the raw pixel-change fraction
+#                                  before inter-camera normalization; >1 boosts, <1 suppresses,
+#                                  and also shifts the scene's normalization reference toward
+#                                  or away from this camera (see motion.normalization below)
 #   mic (str, optional)          — substring pattern to match the camera's audio device name;
 #                                  auto-detected if omitted (USB cameras with built-in mics only)
 #   volume_db (float, default 0.0) — gain applied to this camera's mic audio, in decibels;

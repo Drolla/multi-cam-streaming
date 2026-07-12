@@ -119,7 +119,7 @@ cameras:
   - pattern: "usb.*1-1"
     min_slot: 1              # never fills slot 0 (largest)
     max_slot: 2              # never fills slots beyond 2
-    activity_multiplier: 1.5 # perceived activity boosted 50%
+    activity_multiplier: 1.5 # raw activity boosted 50% before inter-camera normalization
   - pattern: "csi-camera"   # CSI or other camera without auto-detectable mic
     mic: "ReSpeaker"         # explicit audio device name pattern (substring match)
 
@@ -127,6 +127,7 @@ motion:
   check_interval: 1.0      # seconds between motion score computations
   threshold: 15            # pixel diff noise gate (0–255)
   change_threshold: 0.05   # min score delta to consider a layout switch
+  normalization: 0.7       # inter-camera normalization strength (0=none, 1=full)
   min_switch_interval: 5.0 # minimum seconds between accepted switches
 
 video:
