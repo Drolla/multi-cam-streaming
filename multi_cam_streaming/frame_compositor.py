@@ -192,7 +192,8 @@ class FrameCompositor:
         """
         now = time.time()
 
-        if now - self._last_score_time >= self.motion_log_interval:
+        if now - self._last_score_time >= self.motion_log_interval \
+                and now - self._last_switch_time >= self.min_switch_interval:
             self._motion_scores, diff_images = self._compute_motion_scores(frames)
             if self.show_motion_debug:
                 self._show_motion_debug(diff_images, self._motion_scores)
@@ -208,8 +209,7 @@ class FrameCompositor:
                 ranked = self._rank_cameras(frames)
                 new_assignment = self._build_assignment(ranked, self._layouts[new_idx]['frames'])
 
-                if (new_idx != self._active_layout_idx or new_assignment != self._slot_assignment) \
-                        and now - self._last_switch_time >= self.min_switch_interval:
+                if new_idx != self._active_layout_idx or new_assignment != self._slot_assignment:
                     old_layout = self._layouts[self._active_layout_idx]['frames']
                     self._frame_old = self._composite(
                         self._rank_cameras(frames), old_layout,

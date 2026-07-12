@@ -48,12 +48,12 @@ cameras:
 
 motion:
   check_interval: 1.0      # seconds between motion score computations
+  min_switch_interval: 5.0 # minimum seconds between accepted layout/assignment changes
   threshold: 15            # pixel diff noise gate (0–255); higher = less sensitive
-  change_threshold: 0.05   # min score delta (0.0–1.0) on any camera to consider a switch
   normalization: 0.7       # inter-camera normalization strength (0.0–1.0); 0 = each camera's
                             # score reflects only its own activity, 1 = the busiest camera is
                             # pushed toward a full score once scene activity clears the noise floor
-  min_switch_interval: 5.0 # minimum seconds between accepted layout/assignment changes
+  change_threshold: 0.05   # min score delta (0.0–1.0) on any camera to consider a switch
 
 ######## Display / Video ########
 

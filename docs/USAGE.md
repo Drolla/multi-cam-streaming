@@ -125,10 +125,10 @@ cameras:
 
 motion:
   check_interval: 1.0      # seconds between motion score computations
-  threshold: 15            # pixel diff noise gate (0–255)
-  change_threshold: 0.05   # min score delta to consider a layout switch
-  normalization: 0.7       # inter-camera normalization strength (0=none, 1=full)
   min_switch_interval: 5.0 # minimum seconds between accepted switches
+  threshold: 15            # pixel diff noise gate (0–255)
+  normalization: 0.7       # inter-camera normalization strength (0=none, 1=full)
+  change_threshold: 0.05   # min score delta to consider a layout switch
 
 video:
   width: 1280
