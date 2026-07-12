@@ -73,7 +73,7 @@ class AudioMixer:
 
     def __init__(self, audio_manager: AudioManager, pipe_needed: bool = True,
                  output_device: str | None = None, transition_duration: float = 0.0,
-                 compression: dict | None = None):
+                 compression: dict | None = None, size_threshold: float = 0.0):
         """
         Args:
             audio_manager:  An already-open AudioManager providing buffers and cam_to_sd.
@@ -87,12 +87,16 @@ class AudioMixer:
             compression:    Optional {'threshold_db': float, 'ratio_db': float} soft-knee
                             compressor settings applied to the final mixed signal. None
                             disables compression.
+            size_threshold: Minimum displayed slot size (as passed to set_weights) for a
+                            camera to contribute audio; cameras below this are gated to
+                            weight 0 before normalization. 0 disables gating.
         """
         self._mgr = audio_manager
         self._pipe_needed = pipe_needed
         self._output_device = output_device
         self._transition_duration = transition_duration
         self._compression = compression
+        self._size_threshold = size_threshold
         self._target_weights = np.zeros(0, dtype=np.float32)
         self._smoothed_weights = np.zeros(0, dtype=np.float32)
         self._mix_thread: threading.Thread | None = None
@@ -181,12 +185,15 @@ class AudioMixer:
     def set_weights(self, scores: list[float]) -> None:
         """Update per-camera target volume weights.
 
-        Called each scoring interval. Weights are normalised so they sum to 1
-        across matched mics only; unmatched cameras always get weight 0. The
-        mix loop ramps self._smoothed_weights toward this target every block
-        rather than applying it instantly (see transition_duration).
+        Called on each frame-arrangement change. scores are displayed slot sizes (or any
+        non-negative per-camera magnitude); values below size_threshold are gated to 0.
+        Weights are normalised so they sum to 1 across matched mics only; unmatched
+        cameras always get weight 0. The mix loop ramps self._smoothed_weights toward
+        this target every block rather than applying it instantly (see transition_duration).
         """
         arr = np.array(scores, dtype=np.float32)
+        if self._size_threshold > 0:
+            arr[arr < self._size_threshold] = 0.0
         for cam_pos in range(len(arr)):
             if cam_pos not in self._mgr.cam_to_sd:
                 arr[cam_pos] = 0.0
@@ -196,6 +203,11 @@ class AudioMixer:
             # Length changed (shouldn't normally happen mid-run) — snap instead of ramping
             # from a mismatched array.
             self._smoothed_weights = self._target_weights.copy()
+
+        if log.isEnabledFor(logging.INFO):
+            scores_str = "|".join(f"{s:.2f}" for s in scores)
+            weights_str = "|".join(f"{w:.2f}" for w in self._target_weights)
+            log.info("Audio weights changing: scores=%s smoothed_weights=%s", scores_str, weights_str)
 
     def signal_ready(self) -> None:
         """Release the mix loop to begin writing. Call after FFmpeg has started."""
@@ -247,14 +259,12 @@ class AudioMixer:
                         post_db = _to_db(float(np.max(np.abs(adjusted))))
                         stream_levels.append(f"{_fmt_db(pre_db)}/{_fmt_db(post_db)}")
 
-                if debug_enabled:
-                    raw_mixed_db = _to_db(float(np.max(np.abs(mixed))))
-
                 if self._compression is not None:
                     mixed = _apply_compression(mixed, self._compression['threshold_db'],
                                                self._compression['ratio_db'])
 
                 if debug_enabled:
+                    raw_mixed_db = _to_db(float(np.max(np.abs(mixed))))
                     compressed_db = _to_db(float(np.max(np.abs(mixed))))
                     weights_str = ";".join(f"{w:.2f}" for w in self._smoothed_weights)
                     log.debug("weights=%s ; pre/post %s ; mix=%s; comp=%s",

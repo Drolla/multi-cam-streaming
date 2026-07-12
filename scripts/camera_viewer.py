@@ -224,7 +224,8 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
                 AudioMixer(audio_mgr, pipe_needed=mode in ("stream", "both"),
                            output_device=effective_audio_output,
                            transition_duration=audio_transition_duration,
-                           compression=audio_compression)
+                           compression=audio_compression,
+                           size_threshold=audio_size_threshold)
                 if audio_enabled else contextlib.nullcontext()
             )
 
@@ -259,15 +260,10 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
                         frames = read_frames(cam_mgr.frame_sources, output_dims)
                         combined = compositor.process(frames)
 
-                        if audio_mixer is not None:
-                            sizes = compositor.frame_sizes
+                        if audio_mixer is not None and compositor.arrangement_changed:
+                            sizes = compositor.target_sizes
                             if sizes:
-                                gated = [s if s >= audio_size_threshold else 0.0
-                                         for s in sizes]
-                                gated_total = sum(gated)
-                                weights = [s / gated_total for s in gated] \
-                                    if gated_total > 0 else [0.0] * len(gated)
-                                audio_mixer.set_weights(weights)
+                                audio_mixer.set_weights(sizes)
 
                         if mode in ("display", "both"):
                             cv2.imshow("multi_cam_streaming", combined)

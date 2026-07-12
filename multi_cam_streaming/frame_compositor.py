@@ -157,6 +157,7 @@ class FrameCompositor:
 
         self._active_layout_idx = 0
         self._slot_assignment = []   # ordered list of cam_idxs (int), one per slot
+        self._arrangement_changed = False
 
         # Scores at the time the last layout/assignment change was accepted.
         # Keyed by cam_idx; used to measure how much scores have moved since then.
@@ -192,6 +193,28 @@ class FrameCompositor:
         """
         return self._current_sizes(len(self._motion_scores))
 
+    @property
+    def target_sizes(self) -> list[float]:
+        """Per-camera target (post-transition) slot size, one per camera in frame order.
+
+        Unlike frame_sizes, this is not transition-interpolated: it reflects the final
+        'size' each camera will have in the currently active layout/assignment once any
+        animation completes. 0.0 for a camera not currently assigned to any slot.
+        """
+        n_cameras = len(self._motion_scores)
+        sizes = [0.0] * n_cameras
+        layout_frames = self._layouts[self._active_layout_idx]['frames']
+        geom = self._geometry_by_camera(layout_frames, self._slot_assignment)
+        for cam_idx, g in geom.items():
+            if cam_idx < n_cameras:
+                sizes[cam_idx] = g['size']
+        return sizes
+
+    @property
+    def arrangement_changed(self) -> bool:
+        """True if the most recent process() call changed the active layout or slot assignment."""
+        return self._arrangement_changed
+
     def _current_sizes(self, n_cameras):
         """Return a list of n_cameras displayed 'size' values, indexed by cam_idx.
 
@@ -226,6 +249,7 @@ class FrameCompositor:
             BGR numpy array of shape (height, width, 3).
         """
         now = time.time()
+        self._arrangement_changed = False
 
         if now - self._last_score_time >= self.motion_log_interval \
                 and now - self._last_switch_time >= self.min_switch_interval:
@@ -245,6 +269,7 @@ class FrameCompositor:
                 new_assignment = self._build_assignment(ranked, self._layouts[new_idx]['frames'])
 
                 if new_idx != self._active_layout_idx or new_assignment != self._slot_assignment:
+                    self._arrangement_changed = True
                     old_layout = self._layouts[self._active_layout_idx]['frames']
                     self._frame_old = self._composite(
                         self._rank_cameras(frames), old_layout,
@@ -282,7 +307,7 @@ class FrameCompositor:
     def _log_transition(self, new_idx, new_assignment, new_scores):
         new_name = self._layouts[new_idx]['name']
         new_layout = self._layouts[new_idx]['frames']
-        cams = [f"{cam_idx:>1}" for cam_idx in new_assignment]
+        cams = [f"{cam_idx:>1}" if cam_idx is not None else " " for cam_idx in new_assignment]
         sizes = [f"{(new_layout[slot_idx].get('size', 0) if slot_idx < len(new_layout) else 0):.2f}"
                 for slot_idx in range(len(new_assignment))]
 
@@ -293,7 +318,8 @@ class FrameCompositor:
             )
             return
 
-        stars = [f"{'*' * min(10, round(new_scores.get(cam_idx, 0.0) * 10)):<10}" for cam_idx in new_assignment]
+        stars = [f"{'*' * min(10, round(new_scores.get(cam_idx, 0.0) * 10)):<10}" if cam_idx is not None else " " * 10
+                 for cam_idx in new_assignment]
         log.info(
             "Layout change: layout=%-28s cams=%s slots=%s raw_scores=%s",
             new_name, '|'.join(cams), '|'.join(sizes), '|'.join(stars),
