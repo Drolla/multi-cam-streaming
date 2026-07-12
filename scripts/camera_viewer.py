@@ -204,8 +204,8 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
     audio_enabled = bool(audio_cfg.get('enabled', False))
     # CLI --audio-output overrides yaml audio.output; None means no local playback
     effective_audio_output = audio_output if audio_output is not None else audio_cfg.get('output')
-    audio_weight_threshold = float(audio_cfg.get('weight_threshold', 0.0))
-    audio_weight_smoothing = float(audio_cfg.get('weight_smoothing', 0.0))
+    audio_size_threshold = float(audio_cfg.get('size_threshold', 0.0))
+    audio_transition_duration = float(audio_cfg.get('transition_duration', 0.0))
     audio_compression = audio_cfg.get('compression')
 
     with camera_manager.CameraManager(camera_identifiers) as cam_mgr:
@@ -223,8 +223,9 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
             audio_mixer_ctx = (
                 AudioMixer(audio_mgr, pipe_needed=mode in ("stream", "both"),
                            output_device=effective_audio_output,
-                           weight_smoothing=audio_weight_smoothing,
-                           compression=audio_compression)
+                           transition_duration=audio_transition_duration,
+                           compression=audio_compression,
+                           size_threshold=audio_size_threshold)
                 if audio_enabled else contextlib.nullcontext()
             )
 
@@ -259,20 +260,10 @@ def run_camera_viewer(config_path, mode="stream", show_motion_debug=False,
                         frames = read_frames(cam_mgr.frame_sources, output_dims)
                         combined = compositor.process(frames)
 
-                        if audio_mixer is not None:
-                            scores = compositor.motion_scores
-                            if scores:
-                                raw_total = sum(scores)
-                                if raw_total > 0:
-                                    gated = [s if s >= audio_weight_threshold else 0.0
-                                             for s in scores]
-                                    gated_total = sum(gated)
-                                    weights = [s / gated_total for s in gated] \
-                                        if gated_total > 0 else [0.0] * len(gated)
-                                else:
-                                    # No motion anywhere (nothing to gate) — split evenly.
-                                    weights = [1.0 / len(scores)] * len(scores)
-                                audio_mixer.set_weights(weights)
+                        if audio_mixer is not None and compositor.arrangement_changed:
+                            sizes = compositor.target_sizes
+                            if sizes:
+                                audio_mixer.set_weights(sizes)
 
                         if mode in ("display", "both"):
                             cv2.imshow("multi_cam_streaming", combined)

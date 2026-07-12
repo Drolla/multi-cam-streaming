@@ -115,16 +115,16 @@ youtube:
 
 ######## Audio ########
 
-# Audio mixing: blend microphone audio from each camera weighted by motion score.
+# Audio mixing: blend microphone audio from each camera weighted by its displayed frame size.
 # Requires sounddevice (all platforms) and pyudev (Linux) to be installed.
 # Built-in mics on USB cameras are auto-detected; use the 'mic' field per camera
 # entry to override or to assign a mic to cameras without auto-detectable audio.
 audio:
-  enabled: false           # set to true to enable live audio mixing
-  # output: "Speakers"     # optional: substring of output device name for local playback;
-  #                        # can also be set via --audio-output on the command line (CLI takes priority)
-  weight_threshold: 0.01   # raw motion score below which a camera's mic is muted (0 = never mute)
-  weight_smoothing: 0.3    # seconds; higher = smoother/slower volume ramps (0 = instant changes)
-  # compression:           # optional soft-knee compressor on the final mixed signal
-  #   threshold_db: -18    # mixed-signal peaks above this get gain-reduced
-  #   ratio_db: 3.0        # dB-in : 1dB-out, e.g. 3.0 means every 3dB over threshold becomes 1dB in output
+  enabled: false             # set to true to enable live audio mixing
+  # output: "Speakers"       # optional: substring of output device name for local playback;
+  #                          # can also be set via --audio-output on the command line (CLI takes priority)
+  size_threshold: 0.45       # displayed size fraction below which a camera's mic is muted (0 = never mute)
+  transition_duration: 1.0   # seconds; higher = smoother/slower volume ramps (0 = instant changes)
+  # compression:             # optional soft-knee compressor on the final mixed signal
+  #   threshold_db: -18      # mixed-signal peaks above this get gain-reduced
+  #   ratio_db: 3.0          # dB-in : 1dB-out, e.g. 3.0 means every 3dB over threshold becomes 1dB in output
