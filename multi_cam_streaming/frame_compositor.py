@@ -181,6 +181,41 @@ class FrameCompositor:
         """Most recent per-camera motion scores, one per camera in frame order."""
         return list(self._motion_scores)
 
+    @property
+    def frame_sizes(self) -> list[float]:
+        """Most recent per-camera displayed slot size, one per camera in frame order.
+
+        Reflects the same interpolated geometry used to render the current frame: 0.0
+        for a camera not currently assigned to any slot, and the transition-interpolated
+        'size' value (old -> target, per _lerp) for an assigned camera while a layout or
+        assignment change is animating.
+        """
+        return self._current_sizes(len(self._motion_scores))
+
+    def _current_sizes(self, n_cameras):
+        """Return a list of n_cameras displayed 'size' values, indexed by cam_idx.
+
+        Mirrors the per-camera size interpolation used by _composite (old -> target size
+        via _lerp during a transition), so video and audio always agree on how large a
+        camera currently appears. 0.0 for cameras not assigned to any slot.
+        """
+        sizes = [0.0] * n_cameras
+        elapsed = time.time() - self._transition_start
+        t = min(1.0, elapsed / max(self.transition_duration, 1e-6))
+        layout_frames = self._layouts[self._active_layout_idx]['frames']
+
+        for slot_idx, slot in enumerate(layout_frames):
+            cam_idx = self._slot_assignment[slot_idx] if slot_idx < len(self._slot_assignment) else None
+            if cam_idx is None or cam_idx >= n_cameras:
+                continue
+            target_size = slot['size']
+            if t < 1.0 and cam_idx in self._old_geom:
+                sizes[cam_idx] = _lerp(self._old_geom[cam_idx]['size'], target_size, t)
+            else:
+                sizes[cam_idx] = target_size
+
+        return sizes
+
     def process(self, frames):
         """Score, select layout, assign cameras, and composite into the output canvas.
 

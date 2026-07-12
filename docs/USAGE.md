@@ -150,8 +150,10 @@ youtube:
   rtmp_url: "rtmp://a.rtmp.youtube.com/live2/"
 
 audio:
-  enabled: false  # set to true to mix microphone audio weighted by motion score
+  enabled: false  # set to true to mix microphone audio weighted by displayed frame size
   # output: "Speakers"  # optional: play mixed audio to this local output device (substring match)
+  size_threshold: 0.3       # displayed size fraction below which a camera's mic is muted
+  transition_duration: 0.3  # seconds; higher = smoother/slower volume ramps
 ```
 
 Cameras are assigned to layout slots dynamically by **motion priority**: the camera
